@@ -1,0 +1,100 @@
+name: Cross-Platform Build
+
+on:
+  push:
+    tags:
+      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  build-all:
+    name: Build - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: isup
+            asset_name: isup-linux
+          - os: windows-latest
+            artifact_name: isup.exe
+            asset_name: isup-windows.exe
+          - os: macos-latest
+            artifact_name: isup
+            asset_name: isup-macos
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+
+      - name: Get the version
+        id: get_version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Upload binary to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/release/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.asset_name }}-${{ steps.get_version.outputs.VERSION }}
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  create-archives:
+    needs: build-all
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./artifacts
+
+      - name: Create archives
+        run: |
+          mkdir -p release-archives
+
+          # Create Linux archive
+          cp install.sh release-archives/
+          wget -O release-archives/isup-linux https://github.com/shivamhwp/isup/releases/download/${GITHUB_REF#refs/tags/}/isup-linux-${{ steps.get_version.outputs.VERSION }}
+          chmod +x release-archives/isup-linux
+          tar -czf isup-linux-${{ steps.get_version.outputs.VERSION }}.tar.gz -C release-archives isup-linux install.sh
+
+          # Create Windows archive
+          cp install.ps1 release-archives/
+          wget -O release-archives/isup-windows.exe https://github.com/shivamhwp/isup/releases/download/${GITHUB_REF#refs/tags/}/isup-windows.exe-${{ steps.get_version.outputs.VERSION }}
+          zip -j isup-windows-${{ steps.get_version.outputs.VERSION }}.zip release-archives/isup-windows.exe release-archives/install.ps1
+
+          # Create macOS archive
+          wget -O release-archives/isup-macos https://github.com/shivamhwp/isup/releases/download/${GITHUB_REF#refs/tags/}/isup-macos-${{ steps.get_version.outputs.VERSION }}
+          chmod +x release-archives/isup-macos
+          tar -czf isup-macos-${{ steps.get_version.outputs.VERSION }}.tar.gz -C release-archives isup-macos install.sh
+
+      - name: Upload archives to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: isup-*-${{ steps.get_version.outputs.VERSION }}.*
+          file_glob: true
+          tag: ${{ github.ref }}
+          overwrite: true
