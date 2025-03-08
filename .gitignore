@@ -1,0 +1,12 @@
+.env
+.cargo
+.DS_Store
+.idea
+.vscode
+
+# Cargo
+target
+
+# Added by cargo
+
+/target
