@@ -1,27 +1,50 @@
-# isup
+# isup - [ work in progress ] [ not production ready]
 
-A simple CLI tool written in Rust to check if a website or service is up.
+a simple CLI tool written in Rust to check if a website or service is up.
 
 ## Features
 
 - Check if a website or service is up
 - Check multiple websites/services at once
 - Configurable timeout
-- Colorful output
-- Automatically adds https:// if no scheme is provided
+- Cross-platform support (Windows, macOS, Linux)
 
 ## Installation
+
+### Quick Install
+
+#### Unix-like systems (macOS, Linux)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/shivamhwp/isup/main/install.sh | bash
+```
+
+#### Windows (PowerShell)
+
+```powershell
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/shivamhwp/isup/main/install.ps1 -OutFile install.ps1; .\install.ps1; Remove-Item install.ps1
+```
+
+#### Windows (Git Bash or WSL)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/shivamhwp/isup/main/install.sh | bash
+```
 
 ### From source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/isup.git
+git clone https://github.com/shivamhwp/isup.git
 cd isup
 
 # Build and install
 cargo install --path .
 ```
+
+### From releases
+
+You can also download pre-built binaries from the [releases page](https://github.com/shivamhwp/isup/releases).
 
 ## Usage
 
@@ -38,6 +61,7 @@ isup example.com google.com github.com
 # With custom timeout (in seconds)
 isup example.com --timeout 5
 isup example.com -t 5
+
 ```
 
 ## Examples
@@ -56,6 +80,10 @@ isup api.example.com/health
 isup slow-service.example.com --timeout 30
 ```
 
-## License
+## CI/CD
 
-MIT
+This project uses GitHub Actions for continuous integration and deployment:
+
+- Automatically builds binaries for Windows, macOS, and Linux on new releases
+- Creates release archives with installation scripts
+- Updates documentation on new releases

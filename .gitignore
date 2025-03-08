@@ -10,3 +10,4 @@ target
 # Added by cargo
 
 /target
+/test-install.sh
