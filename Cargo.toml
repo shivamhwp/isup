@@ -2,11 +2,23 @@
 name = "isup"
 version = "0.1.0"
 edition = "2021"
-description = "A CLI tool to check if a website or service is up"
-authors = ["Your Name"]
+description = "checks whether a particular site/service/route is up or not."
+authors = ["shivam"]
+license = "MIT"
+readme = "cargo-readme.md"
+repository = "https://github.com/shivam/isup"
+homepage = "https://github.com/shivam/isup"
+keywords = ["cli", "network", "status", "monitoring", "uptime"]
+categories = ["command-line-utilities", "network-programming"]
+exclude = [".github", ".gitignore"]
+
 
 [dependencies]
 reqwest = { version = "0.11", features = ["blocking"] }
 clap = { version = "4.4", features = ["derive"] }
 anyhow = "1.0"
 colored = "2.0"
+
+[profile.release]
+codegen-units = 1
+lto = true
