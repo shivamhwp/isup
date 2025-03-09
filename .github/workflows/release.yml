@@ -46,9 +46,11 @@ jobs:
         run: |
           cd target/${{ matrix.platform.target }}/release/
           if [ "${{ matrix.platform.os }}" = "windows-latest" ]; then
-            certutil -hashfile ${{ matrix.platform.binary }} SHA256 > ${{ matrix.platform.name }}.sha256
+            # Create a proper SHA256 file format for Windows
+            sha256sum ${{ matrix.platform.binary }} | awk '{print $1}' > ${{ matrix.platform.name }}.sha256
           else
-            shasum -a 256 ${{ matrix.platform.binary }} > ${{ matrix.platform.name }}.sha256
+            # Create a proper SHA256 file format for Unix
+            shasum -a 256 ${{ matrix.platform.binary }} | awk '{print $1}' > ${{ matrix.platform.name }}.sha256
           fi
 
       - name: Prepare Release
