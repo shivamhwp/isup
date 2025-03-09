@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release - ${{ matrix.platform.os }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: isup-linux-x86_64
+            binary: isup
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: isup-darwin-x86_64
+            binary: isup
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: isup-windows-x86_64.exe
+            binary: isup.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.platform.target }}
+
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd target/${{ matrix.platform.target }}/release/
+          if [ "${{ matrix.platform.os }}" = "windows-latest" ]; then
+            certutil -hashfile ${{ matrix.platform.binary }} SHA256 > ${{ matrix.platform.name }}.sha256
+          else
+            shasum -a 256 ${{ matrix.platform.binary }} > ${{ matrix.platform.name }}.sha256
+          fi
+
+      - name: Prepare Release
+        shell: bash
+        run: |
+          # Copy binary with proper permissions
+          if [ "${{ matrix.platform.os }}" = "windows-latest" ]; then
+            cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}" "${{ matrix.platform.name }}"
+          else
+            cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}" "${{ matrix.platform.name }}"
+            # Ensure binary is executable
+            chmod +x "${{ matrix.platform.name }}"
+          fi
+
+          # Copy checksum file
+          cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.name }}.sha256" .
+
+      - name: Create Archive
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform.os }}" = "windows-latest" ]; then
+            # Create Windows zip archive
+            cp install.ps1 .
+            7z a ${{ matrix.platform.name }}.zip ${{ matrix.platform.name }} install.ps1
+          else
+            # Create Linux/macOS tar.gz archive
+            cp install.sh .
+            tar -czf ${{ matrix.platform.name }}.tar.gz ${{ matrix.platform.name }} install.sh
+          fi
+
+      - name: Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "${{ matrix.platform.name }},${{ matrix.platform.name }}.sha256,${{ matrix.platform.os == 'windows-latest' && format('{0}.zip', matrix.platform.name) || format('{0}.tar.gz', matrix.platform.name) }}"
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifactContentType: application/octet-stream # Ensure binary format is preserved
+          generateReleaseNotes: true
