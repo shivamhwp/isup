@@ -45,16 +45,32 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Upload binary to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}-${{ steps.get_version.outputs.VERSION }}
-          tag: ${{ github.ref }}
-          overwrite: true
+      # Generate SHA256 checksum
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd target/release/
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            certutil -hashfile ${{ matrix.artifact_name }} SHA256 > ${{ matrix.asset_name }}.sha256
+          else
+            shasum -a 256 ${{ matrix.artifact_name }} > ${{ matrix.asset_name }}.sha256
+          fi
 
-  create-archives:
+      # Upload binary to release
+      - name: Upload binary to release
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.asset_name }}-${{ steps.get_version.outputs.VERSION }}
+          path: target/release/${{ matrix.artifact_name }}
+
+      # Upload SHA256 checksum
+      - name: Upload SHA256 checksum
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.asset_name }}-${{ steps.get_version.outputs.VERSION }}.sha256
+          path: target/release/${{ matrix.asset_name }}.sha256
+
+  create-release:
     needs: build-all
     runs-on: ubuntu-latest
     steps:
@@ -65,10 +81,50 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+
       - name: Download all artifacts
         uses: actions/download-artifact@v3
         with:
           path: ./artifacts
+
+      - name: List artifacts
+        run: ls -R ./artifacts
+
+      - name: Upload binaries to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for artifact in ./artifacts/*; do
+            if [ -d "$artifact" ]; then
+              for file in "$artifact"/*; do
+                if [ -f "$file" ]; then
+                  echo "Uploading $file to release..."
+                  gh release upload ${GITHUB_REF#refs/tags/} "$file" --clobber
+                fi
+              done
+            fi
+          done
+
+  create-archives:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Create archives
         run: |
@@ -76,25 +132,26 @@ jobs:
 
           # Create Linux archive
           cp install.sh release-archives/
-          wget -O release-archives/isup-linux https://github.com/shivamhwp/isup/releases/download/${GITHUB_REF#refs/tags/}/isup-linux-${{ steps.get_version.outputs.VERSION }}
+          gh release download ${GITHUB_REF#refs/tags/} -p "isup-linux-${{ steps.get_version.outputs.VERSION }}" -O release-archives/isup-linux
           chmod +x release-archives/isup-linux
           tar -czf isup-linux-${{ steps.get_version.outputs.VERSION }}.tar.gz -C release-archives isup-linux install.sh
 
           # Create Windows archive
           cp install.ps1 release-archives/
-          wget -O release-archives/isup-windows.exe https://github.com/shivamhwp/isup/releases/download/${GITHUB_REF#refs/tags/}/isup-windows.exe-${{ steps.get_version.outputs.VERSION }}
+          gh release download ${GITHUB_REF#refs/tags/} -p "isup-windows.exe-${{ steps.get_version.outputs.VERSION }}" -O release-archives/isup-windows.exe
           zip -j isup-windows-${{ steps.get_version.outputs.VERSION }}.zip release-archives/isup-windows.exe release-archives/install.ps1
 
           # Create macOS archive
-          wget -O release-archives/isup-macos https://github.com/shivamhwp/isup/releases/download/${GITHUB_REF#refs/tags/}/isup-macos-${{ steps.get_version.outputs.VERSION }}
+          gh release download ${GITHUB_REF#refs/tags/} -p "isup-macos-${{ steps.get_version.outputs.VERSION }}" -O release-archives/isup-macos
           chmod +x release-archives/isup-macos
           tar -czf isup-macos-${{ steps.get_version.outputs.VERSION }}.tar.gz -C release-archives isup-macos install.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload archives to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: isup-*-${{ steps.get_version.outputs.VERSION }}.*
-          file_glob: true
-          tag: ${{ github.ref }}
-          overwrite: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${GITHUB_REF#refs/tags/} isup-linux-${{ steps.get_version.outputs.VERSION }}.tar.gz --clobber
+          gh release upload ${GITHUB_REF#refs/tags/} isup-windows-${{ steps.get_version.outputs.VERSION }}.zip --clobber
+          gh release upload ${GITHUB_REF#refs/tags/} isup-macos-${{ steps.get_version.outputs.VERSION }}.tar.gz --clobber
