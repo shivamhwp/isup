@@ -2,6 +2,8 @@
 
 checks whether a particular site/service/route is up or not.
 
+crates.io: [https://crates.io/crates/isup](https://crates.io/crates/isup)
+
 ## Features
 
 - check if a website or service is up, also can check if a particular route is up or not.
