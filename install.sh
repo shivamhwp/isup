@@ -48,10 +48,12 @@ if ! curl -sL "$DOWNLOAD_URL" -o "$TMP_FILE" || ! curl -sL "$CHECKSUM_URL" -o "$
 fi
 
 # Verify checksum (silently)
+progress "verifying download..."
+EXPECTED_HASH=$(cat "$TMP_CHECKSUM")
 if command -v sha256sum >/dev/null; then
-    SHA256_CMD="sha256sum"
+    ACTUAL_HASH=$(sha256sum "$TMP_FILE" | awk '{print $1}')
 elif command -v shasum >/dev/null; then
-    SHA256_CMD="shasum -a 256"
+    ACTUAL_HASH=$(shasum -a 256 "$TMP_FILE" | awk '{print $1}')
 else
     echo "Error: No sha256sum or shasum command found"
     echo "Please install sha256sum or hit me up here : https://x.com/shivamhwp"
@@ -59,9 +61,9 @@ else
     exit 1
 fi
 
-if ! (cd "$TMP_DIR" && $SHA256_CMD -c "${BINARY}.sha256" >/dev/null 2>&1); then
+if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
     echo "Error: Verification failed - the download appears to be corrupted"
-    echo "Please try again or contact https://x.com/shivamhwp for assistance"
+    echo "Please try again or hit me up here : https://x.com/shivamhwp"
     rm -rf "$TMP_DIR"
     exit 1
 fi
@@ -81,7 +83,7 @@ fi
 progress "installing isup..."
 if ! mv "$TMP_FILE" "$INSTALL_DIR/isup" || ! chmod 755 "$INSTALL_DIR/isup"; then
     echo "Error: Failed to install isup"
-            echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
+    echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
     rm -rf "$TMP_DIR"
     exit 1
 fi
@@ -89,9 +91,6 @@ fi
 # Handle macOS specific security (silently)
 if [ "$PLATFORM" = "darwin" ]; then
     xattr -d com.apple.quarantine "$INSTALL_DIR/isup" 2>/dev/null || true
-    if [ -x "/usr/bin/spctl" ]; then
-        sudo spctl --add "$INSTALL_DIR/isup" 2>/dev/null || true
-    fi
 fi
 
 # Add to PATH if needed
@@ -115,10 +114,6 @@ progress "✅ isup v${VERSION} installed successfully!"
 
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     progress "restart your terminal or run 'source ~/.bashrc' or 'source ~/.zshrc'"
-fi
-
-if [ "$PLATFORM" = "darwin" ]; then
-    progress "note: if you encounter permission issues on first run, approve isup in System Preferences"
 fi
 
 progress "run 'isup --help' to get started"
