@@ -1,17 +1,14 @@
-# isup - [ work in progress ] [ not production ready]
+# isup
 
-a simple CLI tool written in Rust to check if a website or service is up.
+checks whether a particular site/service/route is up or not.
 
 ## Features
 
-- Check if a website or service is up
-- Check multiple websites/services at once
-- Configurable timeout
-- Cross-platform support (Windows, macOS, Linux)
+- check if a website or service is up, also can check if a particular route is up or not.
+- check multiple websites/services at once,
+- configurable timeout
 
-## Installation
-
-### Quick Install
+## installation
 
 #### Unix-like systems (macOS, Linux)
 
@@ -30,21 +27,6 @@ Invoke-WebRequest -Uri https://raw.githubusercontent.com/shivamhwp/isup/main/ins
 ```bash
 curl -sSL https://raw.githubusercontent.com/shivamhwp/isup/main/install.sh | bash
 ```
-
-### From source
-
-```bash
-# Clone the repository
-git clone https://github.com/shivamhwp/isup.git
-cd isup
-
-# Build and install
-cargo install --path .
-```
-
-### From releases
-
-You can also download pre-built binaries from the [releases page](https://github.com/shivamhwp/isup/releases).
 
 ## Usage
 
@@ -79,11 +61,3 @@ isup api.example.com/health
 # Check with a longer timeout for slow services
 isup slow-service.example.com --timeout 30
 ```
-
-## CI/CD
-
-This project uses GitHub Actions for continuous integration and deployment:
-
-- Automatically builds binaries for Windows, macOS, and Linux on new releases
-- Creates release archives with installation scripts
-- Updates documentation on new releases
