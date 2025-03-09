@@ -1,85 +1,125 @@
 #!/bin/bash
 set -e
 
+progress() {
+    echo "=> $1"
+}
+
 # Determine latest version if not specified
 VERSION=${1:-$(curl -s https://api.github.com/repos/shivamhwp/isup/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')}
 
 # Determine OS
-OS="unknown"
+PLATFORM="unknown"
 case "$(uname -s)" in
-    Linux*)     OS="linux";;
-    Darwin*)    OS="macos";;
-    *)          echo "Unsupported OS. Please download manually from https://github.com/shivamhwp/isup/releases"; exit 1;;
+    Linux*)     PLATFORM="linux";;
+    Darwin*)    PLATFORM="darwin";;
+    MSYS*|MINGW*) PLATFORM="windows";;
+    *)          
+        echo "Error: Unsupported platform: $(uname -s)"
+        echo "Please hit me up here : https://x.com/shivamhwp"
+        exit 1
+        ;;
 esac
 
-# Create installation directory
-INSTALL_DIR="/usr/local/bin"
-if [ ! -d "$INSTALL_DIR" ] || [ ! -w "$INSTALL_DIR" ]; then
+ARCH="x86_64"
+
+# Construct binary name and URLs
+if [ "$PLATFORM" = "windows" ]; then
+    BINARY="isup-windows-x86_64.exe"
+else
+    BINARY="isup-${PLATFORM}-${ARCH}"
+fi
+
+DOWNLOAD_URL="https://github.com/shivamhwp/isup/releases/download/v${VERSION}/${BINARY}"
+CHECKSUM_URL="${DOWNLOAD_URL}.sha256"
+
+# Create temporary directory
+TMP_DIR=$(mktemp -d)
+TMP_FILE="${TMP_DIR}/${BINARY}"
+TMP_CHECKSUM="${TMP_DIR}/${BINARY}.sha256"
+
+# Download files
+progress "downloading isup v${VERSION}..."
+if ! curl -sL "$DOWNLOAD_URL" -o "$TMP_FILE" || ! curl -sL "$CHECKSUM_URL" -o "$TMP_CHECKSUM"; then
+    echo "Error: Failed to download isup"
+    echo "Please check your internet connection or hit me up here : https://x.com/shivamhwp"
+    rm -rf "$TMP_DIR"
+    exit 1
+fi
+
+# Verify checksum (silently)
+if command -v sha256sum >/dev/null; then
+    SHA256_CMD="sha256sum"
+elif command -v shasum >/dev/null; then
+    SHA256_CMD="shasum -a 256"
+else
+    echo "Error: No sha256sum or shasum command found"
+    echo "Please install sha256sum or hit me up here : https://x.com/shivamhwp"
+    rm -rf "$TMP_DIR"
+    exit 1
+fi
+
+if ! (cd "$TMP_DIR" && $SHA256_CMD -c "${BINARY}.sha256" >/dev/null 2>&1); then
+    echo "Error: Verification failed - the download appears to be corrupted"
+    echo "Please try again or contact https://x.com/shivamhwp for assistance"
+    rm -rf "$TMP_DIR"
+    exit 1
+fi
+
+# Determine install location
+if [ "$PLATFORM" = "darwin" ]; then
+    INSTALL_DIR="$HOME/.local/bin"
+    mkdir -p "$INSTALL_DIR"
+elif [ -w "/usr/local/bin" ]; then
+    INSTALL_DIR="/usr/local/bin"
+else
     INSTALL_DIR="$HOME/.local/bin"
     mkdir -p "$INSTALL_DIR"
 fi
 
-echo "Downloading isup v${VERSION} for ${OS}..."
-
-# Download the binary
-DOWNLOAD_URL="https://github.com/shivamhwp/isup/releases/download/v${VERSION}/isup-${OS}-${VERSION}"
-curl -L "$DOWNLOAD_URL" -o "${INSTALL_DIR}/isup"
-chmod +x "${INSTALL_DIR}/isup"
-
-# Handle macOS security measures
-if [ "$OS" = "macos" ]; then
-    echo "Setting up for macOS security..."
-    
-    # Try to remove quarantine with user permission if needed
-    if command -v xattr >/dev/null 2>&1; then
-        if ! xattr -d com.apple.quarantine "${INSTALL_DIR}/isup" 2>/dev/null; then
-            echo "Attempting to remove quarantine attribute with sudo..."
-            sudo xattr -d com.apple.quarantine "${INSTALL_DIR}/isup" 2>/dev/null || true
-        fi
-    fi
-    
-    # Try to run it with sudo to pre-approve
-    echo "Attempting to pre-approve isup..."
-    if sudo "${INSTALL_DIR}/isup" --version >/dev/null 2>&1; then
-        echo "✅ isup has been approved for use!"
-    else
-        echo "⚠️  You may need to manually approve isup on first run."
-        echo "   Go to System Preferences → Security & Privacy after first run."
-    fi
-    
-    # Create a temporary launcher script that handles approval
-    LAUNCHER="${INSTALL_DIR}/isup-launcher.sh"
-    cat > "$LAUNCHER" << 'EOF'
-    
-#!/bin/bash
-BINARY_PATH="$(dirname "$0")/isup"
-if ! "$BINARY_PATH" "$@"; then
-    echo "First run may require approval. Attempting to approve..."
-    xattr -d com.apple.quarantine "$BINARY_PATH" 2>/dev/null || sudo xattr -d com.apple.quarantine "$BINARY_PATH" 2>/dev/null || true
-    echo "Please try running isup again, or approve it in System Preferences → Security & Privacy"
-fi
-EOF
-    chmod +x "$LAUNCHER"
-    
-    echo "Created a launcher script that will help with first-run approval."
-    echo "For the first run, you can use: ${LAUNCHER}"
+# Install binary
+progress "installing isup..."
+if ! mv "$TMP_FILE" "$INSTALL_DIR/isup" || ! chmod 755 "$INSTALL_DIR/isup"; then
+    echo "Error: Failed to install isup"
+            echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
+    rm -rf "$TMP_DIR"
+    exit 1
 fi
 
-echo "isup has been installed to ${INSTALL_DIR}/isup"
+# Handle macOS specific security (silently)
+if [ "$PLATFORM" = "darwin" ]; then
+    xattr -d com.apple.quarantine "$INSTALL_DIR/isup" 2>/dev/null || true
+    if [ -x "/usr/bin/spctl" ]; then
+        sudo spctl --add "$INSTALL_DIR/isup" 2>/dev/null || true
+    fi
+fi
 
-# Check if directory is in PATH
+# Add to PATH if needed
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo "NOTE: Make sure ${INSTALL_DIR} is in your PATH."
-    
-    # Suggest adding to PATH based on shell
     SHELL_NAME="$(basename "$SHELL")"
-    if [ "$SHELL_NAME" = "bash" ]; then
-        echo "You can add it by running:"
-        echo "echo 'export PATH=\"\$PATH:${INSTALL_DIR}\"' >> ~/.bashrc && source ~/.bashrc"
-    elif [ "$SHELL_NAME" = "zsh" ]; then
-        echo "You can add it by running:"
-        echo "echo 'export PATH=\"\$PATH:${INSTALL_DIR}\"' >> ~/.zshrc && source ~/.zshrc"
+    if [ "$SHELL_NAME" = "zsh" ] && [ -f "$HOME/.zshrc" ]; then
+        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.zshrc"
+        progress "added $INSTALL_DIR to your PATH in .zshrc"
+    elif [ "$SHELL_NAME" = "bash" ] && [ -f "$HOME/.bashrc" ]; then
+        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.bashrc"
+        progress "added $INSTALL_DIR to your PATH in .bashrc"
+    else
+        progress "note: add $INSTALL_DIR to your PATH to use isup from anywhere"
     fi
 fi
 
-echo "Installation complete! Run 'isup --help' to get started." 
+# Cleanup
+rm -rf "$TMP_DIR"
+
+progress "✅ isup v${VERSION} installed successfully!"
+
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    progress "restart your terminal or run 'source ~/.bashrc' or 'source ~/.zshrc'"
+fi
+
+if [ "$PLATFORM" = "darwin" ]; then
+    progress "note: if you encounter permission issues on first run, approve isup in System Preferences"
+fi
+
+progress "run 'isup --help' to get started"
+progress "if you encounter any issues, hit me up : https://x.com/shivamhwp" 
