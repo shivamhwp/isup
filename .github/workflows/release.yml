@@ -66,24 +66,11 @@ jobs:
           # Copy checksum file
           cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.name }}.sha256" .
 
-      - name: Create Archive
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform.os }}" = "windows-latest" ]; then
-            # Create Windows zip archive
-            cp install.ps1 .
-            7z a ${{ matrix.platform.name }}.zip ${{ matrix.platform.name }} install.ps1
-          else
-            # Create Linux/macOS tar.gz archive
-            cp install.sh .
-            tar -czf ${{ matrix.platform.name }}.tar.gz ${{ matrix.platform.name }} install.sh
-          fi
-
       - name: Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "${{ matrix.platform.name }},${{ matrix.platform.name }}.sha256,${{ matrix.platform.os == 'windows-latest' && format('{0}.zip', matrix.platform.name) || format('{0}.tar.gz', matrix.platform.name) }}"
+          artifacts: "${{ matrix.platform.name }},${{ matrix.platform.name }}.sha256"
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          artifactContentType: application/octet-stream # Ensure binary format is preserved
+          artifactContentType: application/octet-stream
           generateReleaseNotes: true
