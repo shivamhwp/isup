@@ -1,101 +1,85 @@
 #!/bin/bash
 set -e
 
-# Colors for output (will be disabled on Windows)
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+# Determine latest version if not specified
+VERSION=${1:-$(curl -s https://api.github.com/repos/shivamhwp/isup/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')}
 
-# Detect OS
+# Determine OS
 OS="unknown"
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    OS="linux"
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    OS="macos"
-elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
-    OS="windows"
-    # Disable colors on Windows
-    RED=''
-    GREEN=''
-    BLUE=''
-    YELLOW=''
-    NC=''
+case "$(uname -s)" in
+    Linux*)     OS="linux";;
+    Darwin*)    OS="macos";;
+    *)          echo "Unsupported OS. Please download manually from https://github.com/shivamhwp/isup/releases"; exit 1;;
+esac
+
+# Create installation directory
+INSTALL_DIR="/usr/local/bin"
+if [ ! -d "$INSTALL_DIR" ] || [ ! -w "$INSTALL_DIR" ]; then
+    INSTALL_DIR="$HOME/.local/bin"
+    mkdir -p "$INSTALL_DIR"
 fi
 
-echo -e "${BLUE}Installing isup CLI tool on $OS...${NC}"
+echo "Downloading isup v${VERSION} for ${OS}..."
 
-# Check if Git is installed
-if ! command -v git &> /dev/null; then
-    echo -e "${RED}Error: Git is not installed.${NC}"
-    echo -e "Please install Git first."
-    if [[ "$OS" == "windows" ]]; then
-        echo -e "Download from: https://git-scm.com/download/win"
-    elif [[ "$OS" == "macos" ]]; then
-        echo -e "Run: brew install git"
-    elif [[ "$OS" == "linux" ]]; then
-        echo -e "Run: sudo apt-get install git or equivalent for your distribution"
+# Download the binary
+DOWNLOAD_URL="https://github.com/shivamhwp/isup/releases/download/v${VERSION}/isup-${OS}-${VERSION}"
+curl -L "$DOWNLOAD_URL" -o "${INSTALL_DIR}/isup"
+chmod +x "${INSTALL_DIR}/isup"
+
+# Handle macOS security measures
+if [ "$OS" = "macos" ]; then
+    echo "Setting up for macOS security..."
+    
+    # Try to remove quarantine with user permission if needed
+    if command -v xattr >/dev/null 2>&1; then
+        if ! xattr -d com.apple.quarantine "${INSTALL_DIR}/isup" 2>/dev/null; then
+            echo "Attempting to remove quarantine attribute with sudo..."
+            sudo xattr -d com.apple.quarantine "${INSTALL_DIR}/isup" 2>/dev/null || true
+        fi
     fi
-    exit 1
-fi
-
-# Check if Rust is installed
-if ! command -v rustc &> /dev/null; then
-    echo -e "${RED}Error: Rust is not installed.${NC}"
-    echo -e "Please install Rust first by running:"
-    if [[ "$OS" == "windows" ]]; then
-        echo -e "Visit https://www.rust-lang.org/tools/install and download the installer"
+    
+    # Try to run it with sudo to pre-approve
+    echo "Attempting to pre-approve isup..."
+    if sudo "${INSTALL_DIR}/isup" --version >/dev/null 2>&1; then
+        echo "✅ isup has been approved for use!"
     else
-        echo -e "${YELLOW}curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${NC}"
+        echo "⚠️  You may need to manually approve isup on first run."
+        echo "   Go to System Preferences → Security & Privacy after first run."
     fi
-    exit 1
+    
+    # Create a temporary launcher script that handles approval
+    LAUNCHER="${INSTALL_DIR}/isup-launcher.sh"
+    cat > "$LAUNCHER" << 'EOF'
+    
+#!/bin/bash
+BINARY_PATH="$(dirname "$0")/isup"
+if ! "$BINARY_PATH" "$@"; then
+    echo "First run may require approval. Attempting to approve..."
+    xattr -d com.apple.quarantine "$BINARY_PATH" 2>/dev/null || sudo xattr -d com.apple.quarantine "$BINARY_PATH" 2>/dev/null || true
+    echo "Please try running isup again, or approve it in System Preferences → Security & Privacy"
+fi
+EOF
+    chmod +x "$LAUNCHER"
+    
+    echo "Created a launcher script that will help with first-run approval."
+    echo "For the first run, you can use: ${LAUNCHER}"
 fi
 
-# Check if cargo is available
-if ! command -v cargo &> /dev/null; then
-    echo -e "${RED}Error: Cargo is not available.${NC}"
-    echo -e "Please ensure Rust is properly installed with Cargo."
-    exit 1
-fi
+echo "isup has been installed to ${INSTALL_DIR}/isup"
 
-# Create a temporary directory based on OS
-if [[ "$OS" == "windows" ]]; then
-    TMP_DIR=$(mktemp -d -p "$TEMP")
-else
-    TMP_DIR=$(mktemp -d)
-fi
-echo -e "Working in temporary directory: ${TMP_DIR}"
-
-# Clone the repository
-echo -e "Cloning the isup repository..."
-git clone https://github.com/shivamhwp/isup.git "${TMP_DIR}/isup"
-cd "${TMP_DIR}/isup"
-
-# Build and install
-echo -e "Building and installing isup..."
-cargo install --path .
-
-# Check if installation was successful
-if command -v isup &> /dev/null; then
-    echo -e "${GREEN}isup has been successfully installed!${NC}"
-    echo -e "You can now use it by running: ${YELLOW}isup example.com${NC}"
-else
-    echo -e "${RED}Installation may have failed.${NC}"
-    echo -e "Please ensure that your Cargo bin directory is in your PATH."
-    if [[ "$OS" == "windows" ]]; then
-        echo -e "You may need to restart your terminal or add %USERPROFILE%\.cargo\bin to your PATH"
-    else
-        echo -e "You may need to add ~/.cargo/bin to your PATH or restart your terminal"
+# Check if directory is in PATH
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo "NOTE: Make sure ${INSTALL_DIR} is in your PATH."
+    
+    # Suggest adding to PATH based on shell
+    SHELL_NAME="$(basename "$SHELL")"
+    if [ "$SHELL_NAME" = "bash" ]; then
+        echo "You can add it by running:"
+        echo "echo 'export PATH=\"\$PATH:${INSTALL_DIR}\"' >> ~/.bashrc && source ~/.bashrc"
+    elif [ "$SHELL_NAME" = "zsh" ]; then
+        echo "You can add it by running:"
+        echo "echo 'export PATH=\"\$PATH:${INSTALL_DIR}\"' >> ~/.zshrc && source ~/.zshrc"
     fi
 fi
 
-# Clean up
-echo -e "Cleaning up..."
-if [[ "$OS" == "windows" ]]; then
-    rm -rf "${TMP_DIR}" || echo "Could not remove temp directory. You may need to remove it manually: ${TMP_DIR}"
-else
-    rm -rf "${TMP_DIR}"
-fi
-
-echo -e "${GREEN}Installation complete!${NC}" 
+echo "Installation complete! Run 'isup --help' to get started." 
