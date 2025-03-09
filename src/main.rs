@@ -27,6 +27,8 @@ fn main() -> Result<()> {
         .timeout(Duration::from_secs(args.timeout))
         .build()
         .context("failed to create HTTP client")?;
+
+        
     for url_input in &args.urls {
         // Ensure URL has a scheme
         let url = if !url_input.starts_with("http://") && !url_input.starts_with("https://") {
@@ -54,7 +56,7 @@ fn main() -> Result<()> {
                         println!("Description: {}", description.red());
                     }
                     else if status_code == 403 {
-                        println!("⚠️ {} is {}!", url.cyan(), "up".yellow().bold());
+                        println!("⚠️ {} is {}! but restricts automated access", url.cyan(), "up".yellow().bold());
                         println!("Status code: {}", status_code.to_string().red());
                         println!("Description: {}", description.red());
                     }
