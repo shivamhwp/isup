@@ -9,7 +9,7 @@ mod utils;
 use utils::get_status_description;
 mod monitor;
 use monitor::commands::{add_site, list_sites, remove_site, status_sites};
-use monitor::service::run_monitor_service;
+use monitor::service::{run_monitor_service, stop_monitoring_service, is_daemon_running};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -51,6 +51,8 @@ enum Commands {
     /// Run the background monitoring daemon (internal use)
     #[clap(hide = true)]
     Daemon,
+    /// Stop the monitoring service
+    StopMs,
 }
 
 fn main() -> Result<()> {
@@ -76,6 +78,15 @@ fn main() -> Result<()> {
         }
         Some(Commands::Daemon) => {
             run_monitor_service()?;
+            Ok(())
+        }
+        Some(Commands::StopMs) => {
+            if is_daemon_running() {
+                println!("stopping monitoring service...");
+                stop_monitoring_service()?;
+            } else {
+                println!("⚠️ monitoring service is not running");
+            }
             Ok(())
         }
         None => {

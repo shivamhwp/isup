@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use reqwest::StatusCode;
 use std::process::Command;
 use std::path::PathBuf;
+use tokio::signal::unix::signal;
+use tokio::signal::unix::SignalKind;
 
 use crate::monitor::db::{get_all_sites, update_site_status};
 use crate::monitor::notifier::{send_notification, log_notification_attempt};
@@ -15,6 +17,8 @@ use crate::monitor::db::get_site_by_url;
 
 // Global state to track if the service is running
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
+// Global state to track if the service should stop
+static SERVICE_SHOULD_STOP: AtomicBool = AtomicBool::new(false);
 
 // Get the path to the daemon executable
 fn get_daemon_path() -> PathBuf {
@@ -25,12 +29,12 @@ fn get_daemon_path() -> PathBuf {
 pub fn start_background_service() -> Result<()> {
     // Check if daemon is already running
     if is_daemon_running() {
-        println!("Monitoring service (daemon) is already running");
+        println!("monitoring service (daemon) is already running");
         return Ok(());
     }
     
     // Remove the test notification that used test.example.com
-    println!("Starting monitoring service...");
+    println!("starting monitoring service...");
     
     // Start the daemon process
     let daemon_path = get_daemon_path();
@@ -50,16 +54,16 @@ pub fn start_background_service() -> Result<()> {
             .status()?;
             
         if !status.success() {
-            return Err(anyhow::anyhow!("Failed to start monitoring daemon"));
+            return Err(anyhow::anyhow!("failed to start monitoring daemon"));
         }
         
         // Read the PID file to confirm the process started
         match std::fs::read_to_string("/tmp/isup_daemon.pid") {
             Ok(pid_str) => {
-                println!("Monitoring daemon started with PID: {}", pid_str.trim());
+                println!("monitoring daemon started with PID: {}", pid_str.trim());
             },
             Err(_) => {
-                println!("Monitoring daemon started, but couldn't read PID file");
+                println!("monitoring daemon started, but couldn't read PID file");
             }
         }
     }
@@ -82,7 +86,7 @@ pub fn start_background_service() -> Result<()> {
             .status()?;
             
         if !status.success() {
-            return Err(anyhow::anyhow!("Failed to start monitoring daemon"));
+            return Err(anyhow::anyhow!("failed to start monitoring daemon"));
         }
     }
     
@@ -90,9 +94,9 @@ pub fn start_background_service() -> Result<()> {
     std::thread::sleep(Duration::from_millis(500));
     
     if is_daemon_running() {
-        println!("✅ Monitoring service started successfully");
+        println!("✅ monitoring service started successfully");
     } else {
-        println!("⚠️ Monitoring service may not have started properly");
+        println!("⚠️ monitoring service may not have started properly");
         println!("   Check logs at /tmp/isup_daemon.log for details");
     }
     
@@ -134,7 +138,7 @@ pub fn is_daemon_running() -> bool {
 // Function to stop the monitoring service
 pub fn stop_monitoring_service() -> Result<()> {
     if !is_daemon_running() {
-        println!("Monitoring service is not running");
+        println!("monitoring service is not running");
         return Ok(());
     }
     
@@ -142,7 +146,8 @@ pub fn stop_monitoring_service() -> Result<()> {
     {
         if let Ok(pid_str) = std::fs::read_to_string("/tmp/isup_daemon.pid") {
             if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                println!("Stopping monitoring service with PID: {}", pid);
+                // Set the global flag to stop the service
+                SERVICE_SHOULD_STOP.store(true, Ordering::SeqCst);
                 
                 // Send SIGTERM to gracefully terminate the process
                 let status = Command::new("kill")
@@ -150,18 +155,41 @@ pub fn stop_monitoring_service() -> Result<()> {
                     .status()?;
                 
                 if status.success() {
-                    println!("✅ Monitoring service stopped successfully");
+                    // Wait a moment for the service to clean up
+                    std::thread::sleep(Duration::from_millis(500));
                     
-                    // Clean up the PID file
-                    let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
-                    return Ok(());
-                } else {
-                    return Err(anyhow::anyhow!("Failed to stop monitoring service"));
+                    // Check if the process is still running
+                    if !is_daemon_running() {
+                        println!("✅ monitoring service stopped successfully");
+                        
+                        // Clean up the PID file
+                        let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+                        return Ok(());
+                    } else {
+                        // If still running, try a more forceful approach
+                        println!("service still running, attempting forceful termination...");
+                        let force_status = Command::new("kill")
+                            .args(&["-9", &pid.to_string()])
+                            .status()?;
+                            
+                        if force_status.success() {
+                            // Wait a moment to ensure process is terminated
+                            std::thread::sleep(Duration::from_millis(300));
+                            
+                            if !is_daemon_running() {
+                                println!("✅ monitoring service stopped successfully");
+                                let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+                                return Ok(());
+                            }
+                        }
+                    }
                 }
+                
+                return Err(anyhow::anyhow!("failed to stop monitoring service, you may need to terminate it manually"));
             }
         }
         
-        Err(anyhow::anyhow!("Could not read PID file"))
+        Err(anyhow::anyhow!("could not read PID file"))
     }
     
     #[cfg(target_family = "windows")]
@@ -172,10 +200,10 @@ pub fn stop_monitoring_service() -> Result<()> {
             .status()?;
             
         if status.success() {
-            println!("✅ Monitoring service stopped successfully");
+            println!("✅ monitoring service stopped successfully");
             return Ok(());
         } else {
-            return Err(anyhow::anyhow!("Failed to stop monitoring service"));
+            return Err(anyhow::anyhow!("failed to stop monitoring service"));
         }
     }
 }
@@ -184,6 +212,7 @@ pub fn stop_monitoring_service() -> Result<()> {
 pub fn run_monitor_service() -> Result<()> {
     // Set the service as running
     SERVICE_RUNNING.store(true, Ordering::SeqCst);
+    SERVICE_SHOULD_STOP.store(false, Ordering::SeqCst);
     
     // Create a file to store the PID for management
     #[cfg(target_family = "unix")]
@@ -199,10 +228,33 @@ pub fn run_monitor_service() -> Result<()> {
         .enable_time()
         .build()?;
     
-    println!("Monitoring service started successfully");
+    println!("monitoring service started successfully");
     
     // Run the service with signal handling
     runtime.block_on(async {
+        // Set up signal handlers
+        #[cfg(target_family = "unix")]
+        {
+            let mut term_signal = signal(SignalKind::terminate())
+                .expect("failed to create SIGTERM handler");
+            let mut int_signal = signal(SignalKind::interrupt())
+                .expect("failed to create SIGINT handler");
+            
+            // Spawn a task to handle termination signals
+            tokio::spawn(async move {
+                tokio::select! {
+                    _ = term_signal.recv() => {
+                        println!("received SIGTERM signal");
+                        SERVICE_SHOULD_STOP.store(true, Ordering::SeqCst);
+                    }
+                    _ = int_signal.recv() => {
+                        println!("received SIGINT signal");
+                        SERVICE_SHOULD_STOP.store(true, Ordering::SeqCst);
+                    }
+                }
+            });
+        }
+        
         // The main monitoring loop
         monitor_sites_loop().await
     })?;
@@ -230,15 +282,21 @@ async fn monitor_sites_loop() -> Result<()> {
     // Track the next check time for each site
     let next_checks: Arc<Mutex<HashMap<String, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
     
-    println!("Starting monitoring loop");
+    println!("starting monitoring loop");
     
     // Main loop
     loop {
+        // Check if we should stop
+        if SERVICE_SHOULD_STOP.load(Ordering::SeqCst) {
+            println!("stopping monitoring service due to stop request");
+            return Ok(());
+        }
+        
         // Get all sites from the database
         let sites = match get_all_sites() {
             Ok(sites) => sites,
             Err(e) => {
-                eprintln!("Error fetching sites: {}", e);
+                eprintln!("🚨 error fetching sites: {}", e);
                 sleep(Duration::from_secs(5)).await;
                 continue;
             }
@@ -277,7 +335,7 @@ async fn monitor_sites_loop() -> Result<()> {
                 
                 // Spawn a task to check the site
                 tokio::spawn(async move {
-                    println!("Checking site: {}", url_clone);
+                    println!("🔄 checking site: {}", url_clone);
                     
                     match check_site(&client_clone, &url_clone).await {
                         Ok((status, is_success)) => {
@@ -298,7 +356,7 @@ async fn monitor_sites_loop() -> Result<()> {
                             };
                             
                             // Log the status check
-                            println!("Site {} status: {} ({}), previous status: {:?}, state changed: {}", 
+                            println!("🔄 site {} status: {} ({}), previous status: {:?}, state changed: {}", 
                                 url_clone, 
                                 if is_success { "UP" } else { "DOWN" }, 
                                 status_text,
@@ -312,7 +370,7 @@ async fn monitor_sites_loop() -> Result<()> {
                             
                             // Send notification if state changed
                             if state_changed {
-                                println!("State change detected for {}: was {:?}, now {}", 
+                                println!("🔄 state change detected for {}: was {:?}, now {}", 
                                     url_clone, 
                                     previous_status, 
                                     if is_success { "UP" } else { "DOWN" });
@@ -324,21 +382,20 @@ async fn monitor_sites_loop() -> Result<()> {
                                 let notification_result = send_notification(
                                     &site_name,
                                     !is_success,
-                                    &status_text
+                                    &status_desc
                                 );
                                 
                                 // Log whether notification was successful
                                 log_notification_attempt(
                                     &url_clone, 
                                     !is_success, 
-                                    &status_text,
+                                    &status_desc,
                                     &notification_result
                                 );
                             }
                         },
                         Err(e) => {
-                            println!("Site check failed for {}: {}", url_clone, e);
-                            let error_message = e.to_string();
+                            println!("🚨 site check failed for {}: {}", url_clone, e);
                             
                             // Get the current site status BEFORE updating it
                             let previous_status = match get_site_by_url(&url_clone) {
@@ -352,14 +409,17 @@ async fn monitor_sites_loop() -> Result<()> {
                                 None => false // For first check, don't notify
                             };
                             
+                            // Get a generic error status description
+                            let status_desc = get_status_description(503); // Service Unavailable
+                            
                             // Site is down due to connection error
-                            if let Err(db_err) = update_site_status(&url_clone, false, &error_message) {
+                            if let Err(db_err) = update_site_status(&url_clone, false, &status_desc) {
                                 eprintln!("Failed to update site status: {}", db_err);
                             }
                             
                             // Send notification if state changed
                             if state_changed {
-                                println!("State change detected for {}: was {:?}, now DOWN (error)", 
+                                println!("🔄 state change detected for {}: was {:?}, now DOWN (error)", 
                                     url_clone, 
                                     previous_status);
                                 
@@ -370,14 +430,14 @@ async fn monitor_sites_loop() -> Result<()> {
                                 let notification_result = send_notification(
                                     &site_name,
                                     true,
-                                    &error_message
+                                    &status_desc
                                 );
                                 
                                 // Log whether notification was successful
                                 log_notification_attempt(
                                     &url_clone, 
                                     true, 
-                                    &error_message,
+                                    &status_desc,
                                     &notification_result
                                 );
                             }

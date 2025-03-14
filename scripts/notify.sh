@@ -26,9 +26,10 @@ log_message "Message: $MESSAGE"
 
 # Find the isup.svg icon
 ICON_PATHS=(
-    "isup.svg"
-    "/usr/share/icons/hicolor/scalable/apps/isup.svg"
-    "/Applications/isup.app/Contents/Resources/isup.svg"
+    "isup.png"
+    "/usr/share/icons/hicolor/scalable/apps/isup.png"
+    "/Applications/isup.app/Contents/Resources/isup.png"
+    "./assets/isup.png"
 )
 
 ICON=""
@@ -49,13 +50,11 @@ if command -v terminal-notifier &> /dev/null; then
         "terminal-notifier"
         "-title" "$TITLE"
         "-message" "$MESSAGE"
-        "-sound" "Glass"
         "-timeout" "30"
         "-ignoreDnD"
         "-activate" "com.apple.Terminal"
         "-sender" "com.apple.Terminal"
         "-group" "isup-notifications"
-        "-contentImage" "https://raw.githubusercontent.com/apple/swift/main/utils/vim/assets/swift.png"
         "-execute" "open -a Terminal"
         "-actions" "View,Dismiss"
     )
@@ -86,7 +85,7 @@ log_message "Using AppleScript for notification"
 TITLE_ESCAPED="${TITLE//\"/\\\"}"
 MESSAGE_ESCAPED="${MESSAGE//\"/\\\"}"
 
-APPLESCRIPT_CMD="display notification \"$MESSAGE_ESCAPED\" with title \"$TITLE_ESCAPED\" sound name \"Glass\" subtitle \"isup\""
+APPLESCRIPT_CMD="display notification \"$MESSAGE_ESCAPED\" with title \"$TITLE_ESCAPED\" subtitle \"isup\""
 log_message "Executing AppleScript command: $APPLESCRIPT_CMD"
 
 osascript -e "$APPLESCRIPT_CMD"

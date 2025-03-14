@@ -21,6 +21,7 @@ fn get_icon_path() -> PathBuf {
     // Try different locations for the icon
     let possible_paths = [
         "isup.png",                             // Current directory
+        "./assets/isup.png",                    // Assets directory
         "/usr/share/icons/hicolor/scalable/apps/isup.png", // Linux system icon
         "/Applications/isup.app/Contents/Resources/isup.png", // macOS app bundle
     ];
@@ -33,7 +34,7 @@ fn get_icon_path() -> PathBuf {
     }
     
     // Default fallback - just return the name and let the OS find it
-    PathBuf::from("isup.svg")
+    PathBuf::from("isup.png")
 }
 
 // Notification service that manages multiple notifiers
@@ -123,7 +124,6 @@ impl Notifier for MacOSNotifier {
             .title(title)
             .subtitle("isup Monitor")
             .message(body)
-            .sound("Glass")
             .send() {
                 Ok(_) => Ok(()),
                 Err(e) => {
@@ -280,7 +280,7 @@ impl Notifier for AppleScriptNotifier {
     fn notify(&self, title: &str, body: &str) -> Result<()> {
         // Make the notification more prominent with longer duration
         let script = format!(
-            "display notification \"{}\" with title \"{}\" sound name \"Glass\" subtitle \"isup\"",
+            "display notification \"{}\" with title \"{}\" subtitle \"isup\"",
             body.replace("\"", "\\\""),
             title.replace("\"", "\\\"")
         );
@@ -344,15 +344,15 @@ pub fn send_notification(
     status: &str
 ) -> Result<()> {
     let title = if is_down {
-        format!("⚠️ Site Down: {}", url)
+        format!("🚨 site down: {}", url)
     } else {
-        format!("✅ Site Recovered: {}", url)
+        format!(" 👍 site recovered: {}", url)
     };
     
     let body = if is_down {
-        format!("{} is DOWN! Status: {}", url, status)
+        format!("{} is down! status: {}", url, status)
     } else {
-        format!("{} is back UP! Status: {}", url, status)
+        format!("{} is up! status: {}", url, status)
     };
     
     // Create a notification service
