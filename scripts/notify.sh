@@ -50,12 +50,14 @@ if command -v terminal-notifier &> /dev/null; then
         "-title" "$TITLE"
         "-message" "$MESSAGE"
         "-sound" "Glass"
-        "-timeout" "20"
+        "-timeout" "30"
         "-ignoreDnD"
         "-activate" "com.apple.Terminal"
         "-sender" "com.apple.Terminal"
         "-group" "isup-notifications"
         "-contentImage" "https://raw.githubusercontent.com/apple/swift/main/utils/vim/assets/swift.png"
+        "-execute" "open -a Terminal"
+        "-actions" "View,Dismiss"
     )
     
     # Add icon if we found one
