@@ -31,7 +31,12 @@ pub fn start_background_service() -> Result<()> {
         return Ok(());
     }
     
-    // Remove the test notification that used test.example.com
+    // Clean up any stale PID file before starting
+    #[cfg(target_family = "unix")]
+    {
+        let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+    }
+    
     println!("starting monitoring service...");
     
     // Start the daemon process
@@ -55,13 +60,25 @@ pub fn start_background_service() -> Result<()> {
             return Err(anyhow::anyhow!("failed to start monitoring daemon"));
         }
         
+        // Wait briefly for the process to start
+        std::thread::sleep(Duration::from_millis(1000));
+        
         // Read the PID file to confirm the process started
         match std::fs::read_to_string("/tmp/isup_daemon.pid") {
             Ok(pid_str) => {
-                println!("monitoring daemon started with PID: {}", pid_str.trim());
+                if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                    // Verify the process is actually running
+                    if is_daemon_running() {
+                        println!("monitoring daemon started with PID: {}", pid);
+                    } else {
+                        return Err(anyhow::anyhow!("daemon process failed to start properly"));
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("invalid PID in daemon PID file"));
+                }
             },
             Err(_) => {
-                println!("monitoring daemon started, but couldn't read PID file");
+                return Err(anyhow::anyhow!("failed to read daemon PID file"));
             }
         }
     }
@@ -108,14 +125,22 @@ pub fn is_daemon_running() -> bool {
         // Try to read the PID file and check if process exists
         if let Ok(pid_str) = std::fs::read_to_string("/tmp/isup_daemon.pid") {
             if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                // On Unix, check if process exists by sending signal 0
-                return Command::new("kill")
+                // On Unix, check if process exists using kill -0
+                let exists = Command::new("kill")
                     .args(&["-0", &pid.to_string()])
                     .status()
                     .map(|status| status.success())
                     .unwrap_or(false);
+                
+                if !exists {
+                    // Clean up stale PID file if process doesn't exist
+                    let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+                }
+                return exists;
             }
         }
+        // Clean up PID file if it's invalid
+        let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
         false
     }
     
