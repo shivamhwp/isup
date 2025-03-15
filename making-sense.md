@@ -11,5 +11,3 @@ now if we think about json etc. that doesn't make sense.
 3. memory issues : whole dataset needs to be loaded.
 
 <br>
-
-### connection pooling.
