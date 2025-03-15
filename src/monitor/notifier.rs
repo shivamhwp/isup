@@ -16,6 +16,7 @@ trait Notifier: fmt::Debug {
     fn name(&self) -> &'static str;
 }
 
+#[allow(dead_code)]
 // Path to the application icon
 fn get_icon_path() -> PathBuf {
     // Try different locations for the icon

@@ -58,7 +58,7 @@ pub fn list_sites() -> Result<()> {
     let sites = get_all_sites()?;
     
     if sites.is_empty() {
-        println!("No sites are currently being monitored");
+        println!("\n{}", "no sites are currently being monitored".yellow());
         return Ok(());
     }
     
@@ -66,27 +66,37 @@ pub fn list_sites() -> Result<()> {
     let daemon_running = is_daemon_running();
     
     if !daemon_running {
-        println!("{}  Monitoring service is not running. No sites are being checked.", "⚠️".yellow());
-        println!("   Run 'isup add' to restart the monitoring service.\n");
+        println!("\n{}  monitoring service is not running. no sites are being checked.", "⚠️".yellow());
+        println!("   run 'isup add' to restart the monitoring service.");
     } else {
-        println!("{}  Monitoring service is running.", "✓".green());
+        println!("\n{}  monitoring service is running.", "✓".green());
     }
     
-    println!("{} monitored sites:", sites.len());
-    println!("{:<40} {:<10} {:<15}", "URL", "STATUS", "INTERVAL");
+    // Store the count before consuming the sites
+    let site_count = sites.len();
     
-    for site in sites {
+    // Print header
+    println!("📊 {} site(s) monitored by isup:", site_count);
+    println!("{}", "─".repeat(70));
+    println!("{:<40} {:<15} {:<15}", 
+        "URL".bold(), 
+        "STATUS".bold(), 
+        "INTERVAL".bold());
+    println!("{}", "─".repeat(70));
+    
+    // Print each site with spacing between them
+    for (i, site) in sites.into_iter().enumerate() {
         let status = match site.is_up {
             Some(true) => "UP".green().bold(),
             Some(false) => "DOWN".red().bold(),
             None => "UNKNOWN".yellow().bold(),
         };
         
-        println!("{:<40} {:<10} {:<15}", 
+        println!("{:<40} {:<15} {:<15}\n", 
             site.url.cyan(),
             status,
-            format!("{}s", site.interval)
-        );
+            format!("{}s", site.interval));
+            
     }
     
     Ok(())
@@ -129,7 +139,7 @@ pub fn status_sites() -> Result<()> {
     let sites = get_all_sites()?;
     
     if sites.is_empty() {
-        println!("No sites are currently being monitored");
+        println!("{}", "no sites are currently being monitored".yellow());
         return Ok(());
     }
     
@@ -137,18 +147,26 @@ pub fn status_sites() -> Result<()> {
     let daemon_running = is_daemon_running();
     
     if !daemon_running {
-        println!("{}  Monitoring service is not running. No sites are being checked.", "⚠️".yellow());
-        println!("   Run 'isup add' to restart the monitoring service.\n");
+        println!("{}  monitoring service is not running. no sites are being checked.", "⚠️".yellow());
+        println!("   run 'isup add' to restart the monitoring service.");
     } else {
-        println!("{}  Monitoring service is running.", "✓".green());
-    }
-    
-    println!("Current status of monitored sites:");
-    println!("{:<40} {:<10} {:<20} {:<20}", "URL", "STATUS", "LAST CHECKED", "DOWNTIME");
+        println!("\n{}  monitoring service is running.", "✓".green());
+    }    
     
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
     
-    for site in &sites {
+    // Print header without extra newline
+    println!("📊 current status of monitored sites:");
+    println!("{}", "─".repeat(95));
+    println!("{:<40} {:<15} {:<20} {:<20}", 
+        "URL".bold(), 
+        "STATUS".bold(), 
+        "LAST CHECKED".bold(), 
+        "DOWNTIME".bold());
+    println!("{}", "─".repeat(95));
+    
+    // Print each site status with spacing between them
+    for (_i, site) in sites.iter().enumerate() {
         let status = match site.is_up {
             Some(true) => "UP".green().bold(),
             Some(false) => "DOWN".red().bold(),
@@ -185,17 +203,18 @@ pub fn status_sites() -> Result<()> {
             _ => "None".to_string(),
         };
         
-        println!("{:<40} {:<10} {:<20} {:<20}", 
+        println!("{:<40} {:<15} {:<20} {:<20}\n", 
             site.url.cyan(),
             status,
             last_checked,
-            downtime
-        );
+            downtime.red());
+            
+        // No blank lines between sites
     }
     
     // Offer to restart service if not running
     if !daemon_running && !sites.is_empty() {
-        println!("\nWould you like to restart the monitoring service? [y/N]");
+        println!("\nwould you like to restart the monitoring service? [y/N]");
         let mut input = String::new();
         if std::io::stdin().read_line(&mut input).is_ok() {
             if input.trim().to_lowercase() == "y" {
