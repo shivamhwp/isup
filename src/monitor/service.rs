@@ -7,8 +7,6 @@ use std::collections::HashMap;
 use reqwest::StatusCode;
 use std::process::Command;
 use std::path::PathBuf;
-use tokio::signal::unix::signal;
-use tokio::signal::unix::SignalKind;
 
 use crate::monitor::db::{get_all_sites, update_site_status};
 use crate::monitor::notifier::{send_notification, log_notification_attempt};
@@ -477,4 +475,28 @@ async fn check_site(client: &reqwest::Client, url: &str) -> Result<(StatusCode, 
     let is_success = status.is_success();
     
     Ok((status, is_success))
+}
+
+// Add platform-specific signal handling
+#[cfg(unix)]
+use tokio::signal::unix::{signal, SignalKind};
+
+#[cfg(windows)]
+use tokio::signal::windows::ctrl_c;
+
+// Then wherever you're using the signal handling, wrap it in platform-specific code:
+#[cfg(unix)]
+async fn handle_shutdown_signals() {
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+    let mut sigint = signal(SignalKind::interrupt()).unwrap();
+    tokio::select! {
+        _ = sigterm.recv() => {},
+        _ = sigint.recv() => {},
+    }
+}
+
+#[cfg(windows)]
+async fn handle_shutdown_signals() {
+    let mut ctrlc = ctrl_c().unwrap();
+    ctrlc.recv().await;
 } 
