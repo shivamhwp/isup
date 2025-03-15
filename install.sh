@@ -23,6 +23,52 @@ esac
 
 ARCH="x86_64"
 
+# Check for platform-specific notification dependencies
+if [ "$PLATFORM" = "darwin" ]; then
+    progress "checking for terminal-notifier (required for notifications)..."
+    if ! command -v terminal-notifier >/dev/null; then
+        progress "terminal-notifier not found, installing..."
+        if command -v brew >/dev/null; then
+            brew install terminal-notifier
+        else
+            progress "homebrew not found, please install terminal-notifier manually:"
+            progress "brew install terminal-notifier"
+            progress "or download from: https://github.com/julienXX/terminal-notifier/releases"
+        fi
+    else
+        progress "terminal-notifier is already installed"
+    fi
+elif [ "$PLATFORM" = "linux" ]; then
+    progress "checking for notify-send (required for notifications)..."
+    if ! command -v notify-send >/dev/null; then
+        progress "notify-send not found, attempting to install..."
+        # Try to detect the package manager and install libnotify-bin
+        if command -v apt-get >/dev/null; then
+            progress "using apt to install libnotify-bin..."
+            sudo apt-get update && sudo apt-get install -y libnotify-bin
+        elif command -v dnf >/dev/null; then
+            progress "using dnf to install libnotify..."
+            sudo dnf install -y libnotify
+        elif command -v yum >/dev/null; then
+            progress "using yum to install libnotify..."
+            sudo yum install -y libnotify
+        elif command -v pacman >/dev/null; then
+            progress "using pacman to install libnotify..."
+            sudo pacman -S --noconfirm libnotify
+        else
+            progress "could not detect package manager, please install notify-send manually:"
+            progress "for debian/ubuntu: sudo apt-get install libnotify-bin"
+            progress "for fedora: sudo dnf install libnotify"
+            progress "for arch: sudo pacman -S libnotify"
+        fi
+    else
+        progress "notify-send is already installed"
+    fi
+elif [ "$PLATFORM" = "windows" ]; then
+    progress "windows notifications use powershell which should be available by default"
+    progress "no additional dependencies needed for notifications on windows"
+fi
+
 # Construct binary name and URLs
 if [ "$PLATFORM" = "windows" ]; then
     BINARY="isup-windows-x86_64.exe"
