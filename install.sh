@@ -13,8 +13,19 @@ progress() {
     echo "=> $1"
 }
 
+# Error handling function
+handle_error() {
+    echo "Error: $1"
+    echo "Please hit me up here : https://x.com/shivamhwp"
+    # Clean up if temp dir exists
+    if [ -d "$TMP_DIR" ]; then
+        rm -rf "$TMP_DIR"
+    fi
+    exit 1
+}
+
 # Determine latest version if not specified
-VERSION=${1:-$(curl -s https://api.github.com/repos/shivamhwp/isup/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')}
+VERSION=${1:-$(curl -s https://api.github.com/repos/shivamhwp/isup/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/' || echo "latest")}
 
 # Determine OS
 PLATFORM="unknown"
@@ -23,32 +34,41 @@ case "$(uname -s)" in
     Darwin*)    PLATFORM="darwin";;
     MSYS*|MINGW*) PLATFORM="windows";;
     *)          
-        echo "Error: Unsupported platform: $(uname -s)"
-        echo "Please hit me up here : https://x.com/shivamhwp"
-        exit 1
+        handle_error "Unsupported platform: $(uname -s)"
         ;;
 esac
 
 ARCH="x86_64"
 
-# Check for platform-specific notification dependencies (silently)
+# Check for platform-specific notification dependencies
 if [ "$PLATFORM" = "darwin" ]; then
+    progress "checking for terminal-notifier..."
     if ! command -v terminal-notifier >/dev/null; then
+        progress "terminal-notifier not found, attempting to install..."
         if command -v brew >/dev/null; then
-            brew install terminal-notifier >/dev/null 2>&1
+            brew install terminal-notifier >/dev/null 2>&1 || progress "couldn't install terminal-notifier, but continuing anyway"
+        else
+            progress "homebrew not found, skipping terminal-notifier installation"
+            progress "you may want to install terminal-notifier manually for notifications"
         fi
+    else
+        progress "terminal-notifier is already installed"
     fi
 elif [ "$PLATFORM" = "linux" ]; then
     if ! command -v notify-send >/dev/null; then
+        progress "notify-send not found, attempting to install..."
         if command -v apt-get >/dev/null; then
             sudo apt-get update -qq >/dev/null 2>&1
-            sudo apt-get install -y libnotify-bin >/dev/null 2>&1
+            sudo apt-get install -y libnotify-bin >/dev/null 2>&1 || progress "couldn't install libnotify-bin, but continuing anyway"
         elif command -v dnf >/dev/null; then
-            sudo dnf install -y libnotify >/dev/null 2>&1
+            sudo dnf install -y libnotify >/dev/null 2>&1 || progress "couldn't install libnotify, but continuing anyway"
         elif command -v yum >/dev/null; then
-            sudo yum install -y libnotify >/dev/null 2>&1
+            sudo yum install -y libnotify >/dev/null 2>&1 || progress "couldn't install libnotify, but continuing anyway"
         elif command -v pacman >/dev/null; then
-            sudo pacman -S --noconfirm libnotify >/dev/null 2>&1
+            sudo pacman -S --noconfirm libnotify >/dev/null 2>&1 || progress "couldn't install libnotify, but continuing anyway"
+        else
+            progress "no package manager found, skipping libnotify installation"
+            progress "you may want to install libnotify manually for notifications"
         fi
     fi
 fi
@@ -64,17 +84,14 @@ DOWNLOAD_URL="https://github.com/shivamhwp/isup/releases/download/v${VERSION}/${
 CHECKSUM_URL="${DOWNLOAD_URL}.sha256"
 
 # Create temporary directory
-TMP_DIR=$(mktemp -d)
+TMP_DIR=$(mktemp -d) || handle_error "Failed to create temporary directory"
 TMP_FILE="${TMP_DIR}/${BINARY}"
 TMP_CHECKSUM="${TMP_DIR}/${BINARY}.sha256"
 
 # Download files
 progress "downloading isup v${VERSION}..."
 if ! curl -sL "$DOWNLOAD_URL" -o "$TMP_FILE" || ! curl -sL "$CHECKSUM_URL" -o "$TMP_CHECKSUM"; then
-    echo "Error: Failed to download isup"
-    echo "Please check your internet connection or hit me up here : https://x.com/shivamhwp"
-    rm -rf "$TMP_DIR"
-    exit 1
+    handle_error "Failed to download isup. Please check your internet connection."
 fi
 
 # Verify checksum (silently)
@@ -85,43 +102,42 @@ if command -v sha256sum >/dev/null; then
 elif command -v shasum >/dev/null; then
     ACTUAL_HASH=$(shasum -a 256 "$TMP_FILE" | awk '{print $1}')
 else
-    echo "Error: No sha256sum or shasum command found"
-    echo "Please install sha256sum or hit me up here : https://x.com/shivamhwp"
-    rm -rf "$TMP_DIR"
-    exit 1
+    handle_error "No sha256sum or shasum command found. Please install sha256sum or shasum."
 fi
 
 if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
-    echo "Error: Verification failed - the download appears to be corrupted"
-    echo "Please try again or hit me up here : https://x.com/shivamhwp"
-    rm -rf "$TMP_DIR"
-    exit 1
+    handle_error "Verification failed - the download appears to be corrupted. Please try again."
 fi
 
 # Determine install location
 if [ "$PLATFORM" = "darwin" ]; then
     INSTALL_DIR="$HOME/.local/bin"
-    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR" || handle_error "Failed to create installation directory"
 elif [ "$PLATFORM" = "windows" ]; then
     INSTALL_DIR="$HOME/.local/bin"
-    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR" || handle_error "Failed to create installation directory"
 elif [ -w "/usr/local/bin" ]; then
     INSTALL_DIR="/usr/local/bin"
 else
     INSTALL_DIR="$HOME/.local/bin"
-    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR" || handle_error "Failed to create installation directory"
 fi
 
 # Install binary
 progress "installing isup..."
 if [ "$PLATFORM" = "windows" ]; then
-    mv "$TMP_FILE" "$INSTALL_DIR/isup.exe" 2>/dev/null || sudo mv "$TMP_FILE" "$INSTALL_DIR/isup.exe"
-    chmod 755 "$INSTALL_DIR/isup.exe" 2>/dev/null || sudo chmod 755 "$INSTALL_DIR/isup.exe"
+    mv "$TMP_FILE" "$INSTALL_DIR/isup.exe" 2>/dev/null || sudo mv "$TMP_FILE" "$INSTALL_DIR/isup.exe" || handle_error "Failed to move binary to installation directory"
+    chmod 755 "$INSTALL_DIR/isup.exe" 2>/dev/null || sudo chmod 755 "$INSTALL_DIR/isup.exe" || handle_error "Failed to set permissions on binary"
     BINARY_NAME="isup.exe"
 else
-    mv "$TMP_FILE" "$INSTALL_DIR/isup" 2>/dev/null || sudo mv "$TMP_FILE" "$INSTALL_DIR/isup"
-    chmod 755 "$INSTALL_DIR/isup" 2>/dev/null || sudo chmod 755 "$INSTALL_DIR/isup"
+    mv "$TMP_FILE" "$INSTALL_DIR/isup" 2>/dev/null || sudo mv "$TMP_FILE" "$INSTALL_DIR/isup" || handle_error "Failed to move binary to installation directory"
+    chmod 755 "$INSTALL_DIR/isup" 2>/dev/null || sudo chmod 755 "$INSTALL_DIR/isup" || handle_error "Failed to set permissions on binary"
     BINARY_NAME="isup"
+fi
+
+# Verify the binary is executable
+if [ ! -x "$INSTALL_DIR/$BINARY_NAME" ]; then
+    handle_error "The installed binary is not executable"
 fi
 
 # Handle macOS specific security (silently)
@@ -133,10 +149,10 @@ fi
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     SHELL_NAME="$(basename "$SHELL")"
     if [ "$SHELL_NAME" = "zsh" ] && [ -f "$HOME/.zshrc" ]; then
-        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.zshrc" 2>/dev/null || sudo sh -c "echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $HOME/.zshrc"
+        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.zshrc" 2>/dev/null || sudo sh -c "echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $HOME/.zshrc" || progress "couldn't update .zshrc, you may need to add $INSTALL_DIR to your PATH manually"
         progress "added $INSTALL_DIR to your PATH in .zshrc"
     elif [ "$SHELL_NAME" = "bash" ] && [ -f "$HOME/.bashrc" ]; then
-        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.bashrc" 2>/dev/null || sudo sh -c "echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $HOME/.bashrc"
+        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.bashrc" 2>/dev/null || sudo sh -c "echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $HOME/.bashrc" || progress "couldn't update .bashrc, you may need to add $INSTALL_DIR to your PATH manually"
         progress "added $INSTALL_DIR to your PATH in .bashrc"
     else
         progress "note: add $INSTALL_DIR to your PATH to use isup from anywhere"
@@ -145,7 +161,7 @@ fi
 
 # Setup auto-start for all platforms
 LOG_DIR="$HOME/.isup/logs"
-mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR" || handle_error "Failed to create log directory"
 
 # Ask if user wants to install auto-start
 read -p "Do you want to install isup to start automatically on login? [y/N] " -n 1 -r
@@ -156,12 +172,12 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     # macOS - Launch Agent
     if [ "$PLATFORM" = "darwin" ]; then
         LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
-        mkdir -p "$LAUNCH_AGENT_DIR"
+        mkdir -p "$LAUNCH_AGENT_DIR" || handle_error "Failed to create LaunchAgents directory"
         
         # Create the launch agent plist file
         LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.shivamhwp.isup.plist"
         
-        cat > "$LAUNCH_AGENT_FILE" << EOL
+        cat > "$LAUNCH_AGENT_FILE" << EOL || handle_error "Failed to create launch agent file"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -188,7 +204,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 EOL
         
         # Set proper permissions
-        chmod 644 "$LAUNCH_AGENT_FILE"
+        chmod 644 "$LAUNCH_AGENT_FILE" || handle_error "Failed to set permissions on launch agent file"
         
         # Check if the service is already running
         if launchctl list | grep -q "com.shivamhwp.isup"; then
@@ -198,7 +214,7 @@ EOL
         
         # Load the launch agent
         progress "loading launch agent..."
-        launchctl load "$LAUNCH_AGENT_FILE"
+        launchctl load "$LAUNCH_AGENT_FILE" || progress "failed to load launch agent, you may need to run: launchctl load $LAUNCH_AGENT_FILE"
         
         # Verify it's running
         if launchctl list | grep -q "com.shivamhwp.isup"; then
@@ -213,12 +229,12 @@ EOL
         # Check if systemd is available
         if command -v systemctl >/dev/null; then
             SYSTEMD_DIR="$HOME/.config/systemd/user"
-            mkdir -p "$SYSTEMD_DIR"
+            mkdir -p "$SYSTEMD_DIR" || handle_error "Failed to create systemd user directory"
             
             # Create systemd service file
             SYSTEMD_FILE="$SYSTEMD_DIR/isup.service"
             
-            cat > "$SYSTEMD_FILE" << EOL
+            cat > "$SYSTEMD_FILE" << EOL || handle_error "Failed to create systemd service file"
 [Unit]
 Description=isup monitoring service
 After=network.target
@@ -233,11 +249,11 @@ WantedBy=default.target
 EOL
             
             # Reload systemd
-            systemctl --user daemon-reload
+            systemctl --user daemon-reload || progress "failed to reload systemd daemon"
             
             # Enable and start the service
-            systemctl --user enable isup.service
-            systemctl --user start isup.service
+            systemctl --user enable isup.service || progress "failed to enable isup service"
+            systemctl --user start isup.service || progress "failed to start isup service"
             
             progress "✅ systemd user service installed and started!"
             progress "check status with: systemctl --user status isup.service"
@@ -245,12 +261,12 @@ EOL
         # Fallback to desktop entry if systemd is not available
         else
             AUTOSTART_DIR="$HOME/.config/autostart"
-            mkdir -p "$AUTOSTART_DIR"
+            mkdir -p "$AUTOSTART_DIR" || handle_error "Failed to create autostart directory"
             
             # Create desktop entry
             DESKTOP_FILE="$AUTOSTART_DIR/isup.desktop"
             
-            cat > "$DESKTOP_FILE" << EOL
+            cat > "$DESKTOP_FILE" << EOL || handle_error "Failed to create desktop entry file"
 [Desktop Entry]
 Type=Application
 Name=isup
@@ -260,7 +276,7 @@ X-GNOME-Autostart-enabled=true
 Comment=isup monitoring service
 EOL
             
-            chmod +x "$DESKTOP_FILE"
+            chmod +x "$DESKTOP_FILE" || handle_error "Failed to set permissions on desktop entry file"
             progress "✅ desktop autostart entry created!"
             progress "isup will start automatically on next login"
         fi
@@ -273,7 +289,7 @@ EOL
         # Create VBS script to run without showing a command window
         STARTUP_SCRIPT="$STARTUP_DIR\\isup.vbs"
         
-        cat > "$STARTUP_SCRIPT" << EOL
+        cat > "$STARTUP_SCRIPT" << EOL || handle_error "Failed to create startup script"
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.Run chr(34) & "$INSTALL_DIR\\$BINARY_NAME" & chr(34) & " daemon", 0
 Set WshShell = Nothing
