@@ -1,30 +1,17 @@
 #!/bin/bash
 set -e
 
-# Function to handle permissions and directory creation
-setup_permissions() {
-    local dir="$1"
-    if [ ! -d "$dir" ]; then
-        mkdir -p "$dir" 2>/dev/null || {
-            sudo mkdir -p "$dir"
-            sudo chown "$(whoami)" "$dir"
-        }
-    fi
-    chmod 755 "$dir" 2>/dev/null || sudo chmod 755 "$dir"
-}
+# Fix any potential Windows line endings without dos2unix
+sed -i.bak 's/\r$//' "$0" 2>/dev/null || true
+rm -f "$0.bak" 2>/dev/null || true
 
-# Function for progress messages
+# Ensure the script is executable
+chmod +x "$0" 2>/dev/null || true
+
+# Simple progress function
 progress() {
     echo "=> $1"
 }
-
-# Ensure script has execute permissions
-chmod +x "$0" 2>/dev/null || sudo chmod +x "$0"
-
-# Setup necessary directories with proper permissions
-setup_permissions "$HOME/.local/bin"
-setup_permissions "$HOME/.isup"
-setup_permissions "$HOME/.isup/logs"
 
 # Determine latest version if not specified
 VERSION=${1:-$(curl -s https://api.github.com/repos/shivamhwp/isup/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')}
@@ -44,50 +31,26 @@ esac
 
 ARCH="x86_64"
 
-# Check for platform-specific notification dependencies
+# Check for platform-specific notification dependencies (silently)
 if [ "$PLATFORM" = "darwin" ]; then
-    progress "checking for terminal-notifier (required for notifications)..."
     if ! command -v terminal-notifier >/dev/null; then
-        progress "terminal-notifier not found, installing..."
         if command -v brew >/dev/null; then
-            brew install terminal-notifier
-        else
-            progress "homebrew not found, please install terminal-notifier manually:"
-            progress "brew install terminal-notifier"
-            progress "or download from: https://github.com/julienXX/terminal-notifier/releases"
+            brew install terminal-notifier >/dev/null 2>&1
         fi
-    else
-        progress "terminal-notifier is already installed"
     fi
 elif [ "$PLATFORM" = "linux" ]; then
-    progress "checking for notify-send (required for notifications)..."
     if ! command -v notify-send >/dev/null; then
-        progress "notify-send not found, attempting to install..."
-        # Try to detect the package manager and install libnotify-bin
         if command -v apt-get >/dev/null; then
-            progress "using apt to install libnotify-bin..."
-            sudo apt-get update && sudo apt-get install -y libnotify-bin
+            sudo apt-get update -qq >/dev/null 2>&1
+            sudo apt-get install -y libnotify-bin >/dev/null 2>&1
         elif command -v dnf >/dev/null; then
-            progress "using dnf to install libnotify..."
-            sudo dnf install -y libnotify
+            sudo dnf install -y libnotify >/dev/null 2>&1
         elif command -v yum >/dev/null; then
-            progress "using yum to install libnotify..."
-            sudo yum install -y libnotify
+            sudo yum install -y libnotify >/dev/null 2>&1
         elif command -v pacman >/dev/null; then
-            progress "using pacman to install libnotify..."
-            sudo pacman -S --noconfirm libnotify
-        else
-            progress "could not detect package manager, please install notify-send manually:"
-            progress "for debian/ubuntu: sudo apt-get install libnotify-bin"
-            progress "for fedora: sudo dnf install libnotify"
-            progress "for arch: sudo pacman -S libnotify"
+            sudo pacman -S --noconfirm libnotify >/dev/null 2>&1
         fi
-    else
-        progress "notify-send is already installed"
     fi
-elif [ "$PLATFORM" = "windows" ]; then
-    progress "windows notifications use powershell which should be available by default"
-    progress "no additional dependencies needed for notifications on windows"
 fi
 
 # Construct binary name and URLs
