@@ -153,6 +153,73 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     fi
 fi
 
+# Setup launch agent for macOS
+if [ "$PLATFORM" = "darwin" ]; then
+    # Ask if user wants to install launch agent
+    read -p "Do you want to install isup as a launch agent (starts automatically on login)? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        progress "setting up launch agent..."
+        
+        # Create necessary directories
+        LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
+        LOG_DIR="$HOME/.isup/logs"
+        
+        mkdir -p "$LAUNCH_AGENT_DIR"
+        mkdir -p "$LOG_DIR"
+        
+        # Create the launch agent plist file
+        LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.shivamhwp.isup.plist"
+        
+        cat > "$LAUNCH_AGENT_FILE" << EOL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.shivamhwp.isup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$INSTALL_DIR/isup</string>
+        <string>daemon</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>$LOG_DIR/error.log</string>
+    <key>StandardOutPath</key>
+    <string>$LOG_DIR/output.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
+EOL
+        
+        # Set proper permissions
+        chmod 644 "$LAUNCH_AGENT_FILE"
+        
+        # Check if the service is already running
+        if launchctl list | grep -q "com.shivamhwp.isup"; then
+            progress "unloading existing launch agent..."
+            launchctl unload "$LAUNCH_AGENT_FILE" 2>/dev/null || true
+        fi
+        
+        # Load the launch agent
+        progress "loading launch agent..."
+        launchctl load "$LAUNCH_AGENT_FILE"
+        
+        # Verify it's running
+        if launchctl list | grep -q "com.shivamhwp.isup"; then
+            progress "✅ launch agent installed and running successfully!"
+        else
+            progress "⚠️ launch agent installation may have failed"
+            progress "please check the logs or run manually with: launchctl load $LAUNCH_AGENT_FILE"
+        fi
+    fi
+fi
+
 # Cleanup
 rm -rf "$TMP_DIR"
 

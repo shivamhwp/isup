@@ -14,12 +14,15 @@ crates.io: [https://crates.io/crates/isup](https://crates.io/crates/isup)
 - monitor sites continuously with customizable intervals.
 - receive on-device notifications when site status changes.
 - can automatically ping your servers to keep them awake.
+- auto-start on login with launch agent (macOS)
 
-## installation (linux, macos, wsl)
+## Installation (linux, macos, wsl)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/shivamhwp/isup/main/install.sh | bash
 ```
+
+During installation on macOS, you'll be asked if you want to install isup as a launch agent. This will make isup start automatically when you log in and continue running in the background. it's super lightweight (no need to worry about memory).
 
 ## Usage
 
@@ -53,6 +56,28 @@ isup remove shivam.ing
 isup stop-ms
 ```
 
+## Launch Agent (macOS)
+
+The launch agent ensures that isup's monitoring service runs automatically when you log in and continues running in the background, even if you close your terminal or restart your computer.
+
+### Installing the Launch Agent
+
+If you didn't install the launch agent during the initial installation, you can install it separately:
+
+```bash
+# Download and run the launch agent installation script
+curl -sSL https://raw.githubusercontent.com/shivamhwp/isup/main/scripts/install-launch-agent.sh | bash
+```
+
+### Uninstalling the Launch Agent
+
+To remove the launch agent:
+
+```bash
+# Download and run the launch agent uninstallation script
+curl -sSL https://raw.githubusercontent.com/shivamhwp/isup/main/scripts/uninstall-launch-agent.sh | bash
+```
+
 ## Command Reference
 
 | Command                 | Description                                | Options                                                                                                              |
@@ -73,3 +98,13 @@ When checking a site, `isup` will display one of the following status indicators
 - ⚠️ **UP but restricts automated access** - The site returned a 403 Forbidden status
 - ❓ **DOES NOT EXIST** - The domain doesn't exist or returned a 404 Not Found
 - ❌ **DOWN** - The site is down (5xx status code or connection error)
+
+## Uninstallation
+
+To completely remove isup from your system:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/shivamhwp/isup/main/uninstall.sh | bash
+```
+
+This will remove the binary, launch agent (if installed), and all data files.
