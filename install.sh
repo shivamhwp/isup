@@ -1,9 +1,30 @@
 #!/bin/bash
 set -e
 
+# Function to handle permissions and directory creation
+setup_permissions() {
+    local dir="$1"
+    if [ ! -d "$dir" ]; then
+        mkdir -p "$dir" 2>/dev/null || {
+            sudo mkdir -p "$dir"
+            sudo chown "$(whoami)" "$dir"
+        }
+    fi
+    chmod 755 "$dir" 2>/dev/null || sudo chmod 755 "$dir"
+}
+
+# Function for progress messages
 progress() {
     echo "=> $1"
 }
+
+# Ensure script has execute permissions
+chmod +x "$0" 2>/dev/null || sudo chmod +x "$0"
+
+# Setup necessary directories with proper permissions
+setup_permissions "$HOME/.local/bin"
+setup_permissions "$HOME/.isup"
+setup_permissions "$HOME/.isup/logs"
 
 # Determine latest version if not specified
 VERSION=${1:-$(curl -s https://api.github.com/repos/shivamhwp/isup/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')}
@@ -131,20 +152,12 @@ fi
 # Install binary
 progress "installing isup..."
 if [ "$PLATFORM" = "windows" ]; then
-    if ! mv "$TMP_FILE" "$INSTALL_DIR/isup.exe" || ! chmod 755 "$INSTALL_DIR/isup.exe"; then
-        echo "Error: Failed to install isup"
-        echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
-        rm -rf "$TMP_DIR"
-        exit 1
-    fi
+    mv "$TMP_FILE" "$INSTALL_DIR/isup.exe" 2>/dev/null || sudo mv "$TMP_FILE" "$INSTALL_DIR/isup.exe"
+    chmod 755 "$INSTALL_DIR/isup.exe" 2>/dev/null || sudo chmod 755 "$INSTALL_DIR/isup.exe"
     BINARY_NAME="isup.exe"
 else
-    if ! mv "$TMP_FILE" "$INSTALL_DIR/isup" || ! chmod 755 "$INSTALL_DIR/isup"; then
-        echo "Error: Failed to install isup"
-        echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
-        rm -rf "$TMP_DIR"
-        exit 1
-    fi
+    mv "$TMP_FILE" "$INSTALL_DIR/isup" 2>/dev/null || sudo mv "$TMP_FILE" "$INSTALL_DIR/isup"
+    chmod 755 "$INSTALL_DIR/isup" 2>/dev/null || sudo chmod 755 "$INSTALL_DIR/isup"
     BINARY_NAME="isup"
 fi
 
@@ -157,10 +170,10 @@ fi
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     SHELL_NAME="$(basename "$SHELL")"
     if [ "$SHELL_NAME" = "zsh" ] && [ -f "$HOME/.zshrc" ]; then
-        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.zshrc"
+        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.zshrc" 2>/dev/null || sudo sh -c "echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $HOME/.zshrc"
         progress "added $INSTALL_DIR to your PATH in .zshrc"
     elif [ "$SHELL_NAME" = "bash" ] && [ -f "$HOME/.bashrc" ]; then
-        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.bashrc"
+        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.bashrc" 2>/dev/null || sudo sh -c "echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> $HOME/.bashrc"
         progress "added $INSTALL_DIR to your PATH in .bashrc"
     else
         progress "note: add $INSTALL_DIR to your PATH to use isup from anywhere"
