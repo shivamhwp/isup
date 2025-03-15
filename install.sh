@@ -21,7 +21,10 @@ if grep -q $'\r' "$0"; then
 fi
 
 # Ensure the script is executable
-chmod +x "$0" 2>/dev/null || true
+# Redirecting both stdout and stderr to /dev/null to hide any errors
+# This is useful when running in environments where chmod might fail
+# but we still want the script to continue execution
+chmod +x "$0" >/dev/null 2>&1 || true
 
 # Simple progress function
 progress() {
