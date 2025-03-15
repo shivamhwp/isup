@@ -34,7 +34,10 @@ pub fn start_background_service() -> Result<()> {
     // Clean up any stale PID file before starting
     #[cfg(target_family = "unix")]
     {
-        let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+        if std::path::Path::new("/tmp/isup_daemon.pid").exists() {
+            println!("removing stale PID file before starting service");
+            let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+        }
     }
     
     println!("starting monitoring service...");
@@ -134,9 +137,51 @@ pub fn is_daemon_running() -> bool {
                 
                 if !exists {
                     // Clean up stale PID file if process doesn't exist
+                    println!("found stale PID file for process {} that no longer exists", pid);
                     let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+                    return false;
                 }
+                
+                // Also verify this is actually our daemon process
+                #[cfg(target_os = "macos")]
+                {
+                    // On macOS, use ps to check the command name
+                    let output = Command::new("ps")
+                        .args(&["-p", &pid.to_string(), "-o", "comm="])
+                        .output();
+                    
+                    if let Ok(output) = output {
+                        if output.status.success() {
+                            let cmd = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                            // Check if the process is our daemon
+                            if cmd.contains("isup") {
+                                return true;
+                            } else {
+                                println!("PID {} belongs to '{}', not our daemon", pid, cmd);
+                                let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+                                return false;
+                            }
+                        }
+                    }
+                }
+                
+                #[cfg(target_os = "linux")]
+                {
+                    // On Linux, check /proc/{pid}/cmdline
+                    if let Ok(cmdline) = std::fs::read_to_string(format!("/proc/{}/cmdline", pid)) {
+                        if cmdline.contains("isup") {
+                            return true;
+                        } else {
+                            println!("PID {} belongs to another process, not our daemon", pid);
+                            let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+                            return false;
+                        }
+                    }
+                }
+                
                 return exists;
+            } else {
+                println!("invalid PID in daemon PID file");
             }
         }
         // Clean up PID file if it's invalid
@@ -162,6 +207,11 @@ pub fn is_daemon_running() -> bool {
 pub fn stop_monitoring_service() -> Result<()> {
     if !is_daemon_running() {
         println!("monitoring service is not running");
+        // Clean up any stale PID file
+        #[cfg(target_family = "unix")]
+        {
+            let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+        }
         return Ok(());
     }
     
@@ -171,6 +221,20 @@ pub fn stop_monitoring_service() -> Result<()> {
             if let Ok(pid) = pid_str.trim().parse::<u32>() {
                 // Set the global flag to stop the service
                 SERVICE_SHOULD_STOP.store(true, Ordering::SeqCst);
+                
+                // Check if the process exists before trying to kill it
+                let process_exists = Command::new("kill")
+                    .args(&["-0", &pid.to_string()])
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(false);
+                
+                if !process_exists {
+                    println!("process with PID {} no longer exists", pid);
+                    let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+                    println!("✅ cleaned up stale PID file");
+                    return Ok(());
+                }
                 
                 // Send SIGTERM to gracefully terminate the process
                 let status = Command::new("kill")
@@ -212,7 +276,9 @@ pub fn stop_monitoring_service() -> Result<()> {
             }
         }
         
-        Err(anyhow::anyhow!("could not read PID file"))
+        // If we get here, there was an issue with the PID file, but we should clean it up
+        let _ = std::fs::remove_file("/tmp/isup_daemon.pid");
+        return Err(anyhow::anyhow!("could not read PID file, cleaned up stale file"));
     }
     
     #[cfg(target_family = "windows")]

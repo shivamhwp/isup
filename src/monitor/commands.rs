@@ -84,7 +84,7 @@ pub fn list_sites() -> Result<()> {
         "INTERVAL".bold());
     println!("{}", "─".repeat(70));
     
-    // Print each site with spacing between them
+    // Print each site without vertical spacing
     for (i, site) in sites.into_iter().enumerate() {
         let status = match site.is_up {
             Some(true) => "UP".green().bold(),
@@ -92,13 +92,11 @@ pub fn list_sites() -> Result<()> {
             None => "UNKNOWN".yellow().bold(),
         };
         
-        println!("{:<40} {:<15} {:<15}\n", 
+        println!("{:<40} {:<15} {:<15}", 
             site.url.cyan(),
             status,
             format!("{}s", site.interval));
-            
     }
-    
     Ok(())
 }
 
@@ -165,14 +163,13 @@ pub fn status_sites() -> Result<()> {
         "DOWNTIME".bold());
     println!("{}", "─".repeat(95));
     
-    // Print each site status with spacing between them
+    // Print each site status without spacing between them
     for (_i, site) in sites.iter().enumerate() {
         let status = match site.is_up {
             Some(true) => "UP".green().bold(),
             Some(false) => "DOWN".red().bold(),
             None => "UNKNOWN".yellow().bold(),
         };
-        
         let last_checked = match site.last_checked {
             Some(timestamp) => {
                 let ago = now - timestamp;
@@ -207,9 +204,7 @@ pub fn status_sites() -> Result<()> {
             site.url.cyan(),
             status,
             last_checked,
-            downtime.red());
-            
-        // No blank lines between sites
+            downtime.red());            
     }
     
     // Offer to restart service if not running
