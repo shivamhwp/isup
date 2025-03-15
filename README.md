@@ -1,7 +1,6 @@
 # isup
 
 ![Crates.io Total Downloads](https://img.shields.io/crates/d/isup?labelColor=%23222&color=white)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/shivamhwp/isup/release.yml?labelColor=%23222&color=white)
 
 checks whether a particular site/service/route is up or not. get on-device notificaitons, when down.
 
