@@ -70,12 +70,6 @@ isup stop-ms
 
 isup can be configured to start automatically when you log in, ensuring your monitoring continues even after system restarts.
 
-### Platform-Specific Implementation
-
-- **macOS**: Uses Launch Agents (`~/Library/LaunchAgents/`)
-- **Linux**: Uses either systemd user services or desktop autostart entries
-- **Windows**: Uses startup folder scripts
-
 ### Installing Auto-Start
 
 If you didn't enable auto-start during installation, you can set it up later:
