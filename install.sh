@@ -56,7 +56,18 @@ case "$(uname -s)" in
         ;;
 esac
 
-ARCH="x86_64"
+# Determine architecture
+ARCH="$(uname -m)"
+# Normalize architecture names
+case "$ARCH" in
+    x86_64|amd64)  ARCH="x86_64";;
+    arm64|aarch64) ARCH="arm64";;
+    *)
+        # Default to x86_64 if architecture detection fails
+        ARCH="x86_64"
+        progress "Warning: Unrecognized architecture: $ARCH, defaulting to x86_64"
+        ;;
+esac
 
 # Silently check and install platform-specific notification dependencies
 if [ "$PLATFORM" = "darwin" ]; then
