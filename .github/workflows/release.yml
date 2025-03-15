@@ -25,6 +25,10 @@ jobs:
             target: x86_64-apple-darwin
             name: isup-darwin-x86_64
             binary: isup
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: isup-darwin-arm64
+            binary: isup
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             name: isup-windows-x86_64.exe
