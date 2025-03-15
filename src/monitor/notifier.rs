@@ -125,11 +125,33 @@ impl Notifier for MacOSNotifier {
             .title(title)
             .subtitle("isup Monitor")
             .message(body)
+            .sound("Glass") // Add sound for better visibility
             .send() {
-                Ok(_) => Ok(()),
+                Ok(_) => {
+                    log_to_file("macOS native notification sent successfully");
+                    Ok(())
+                },
                 Err(e) => {
                     log_to_file(&format!("Detailed macOS notification error: {:?}", e));
-                    Err(anyhow!("macOS notification failed: {}", e))
+                    
+                    // Fall back to AppleScript if the native method fails
+                    log_to_file("Falling back to AppleScript for notification");
+                    let script = format!(
+                        "display notification \"{}\" with title \"{}\" subtitle \"isup\"",
+                        body.replace("\"", "\\\""),
+                        title.replace("\"", "\\\"")
+                    );
+                    
+                    match Command::new("osascript")
+                        .arg("-e")
+                        .arg(&script)
+                        .output() {
+                            Ok(output) if output.status.success() => {
+                                log_to_file("Fallback AppleScript notification succeeded");
+                                Ok(())
+                            },
+                            _ => Err(anyhow!("macOS notification failed: {}", e))
+                        }
                 }
             }
     }
@@ -154,6 +176,13 @@ impl ShellScriptNotifier {
         
         // 1. Try executable directory
         if let Ok(mut exe_path) = std::env::current_exe() {
+            // Add the executable directory itself
+            let mut exe_dir = exe_path.clone();
+            exe_dir.pop();
+            exe_dir.push("notify.sh");
+            paths.push(exe_dir);
+            
+            // Add scripts subdirectory of executable directory
             exe_path.pop();
             exe_path.push("scripts");
             exe_path.push("notify.sh");
@@ -162,13 +191,31 @@ impl ShellScriptNotifier {
         
         // 2. Try current working directory
         if let Ok(mut cwd) = std::env::current_dir() {
+            // Add the current directory itself
+            let mut current_dir = cwd.clone();
+            current_dir.push("notify.sh");
+            paths.push(current_dir);
+            
+            // Add scripts subdirectory
             cwd.push("scripts");
             cwd.push("notify.sh");
             paths.push(cwd);
         }
         
-        // 3. Try relative path
+        // 3. Try relative paths
         paths.push(PathBuf::from("./scripts/notify.sh"));
+        paths.push(PathBuf::from("./notify.sh"));
+        
+        // 4. Try standard installation paths
+        paths.push(PathBuf::from("/usr/local/bin/isup-notify.sh"));
+        paths.push(PathBuf::from("/usr/local/share/isup/notify.sh"));
+        
+        // 5. Try home directory
+        if let Some(mut home_dir) = dirs::home_dir() {
+            home_dir.push(".isup");
+            home_dir.push("notify.sh");
+            paths.push(home_dir);
+        }
         
         // Log all attempted paths
         for path in &paths {
@@ -183,9 +230,109 @@ impl ShellScriptNotifier {
             }
         }
         
-        // If no path exists, return the first one (will fail with clear error)
-        log_to_file("No valid notification script path found!");
+        // If no path exists, create a temporary script
+        log_to_file("No valid notification script path found! Creating temporary script...");
+        if let Some(temp_path) = Self::create_temporary_script() {
+            log_to_file(&format!("Created temporary script at: {:?}", temp_path));
+            return temp_path;
+        }
+        
+        // If all else fails, return the first path (will fail with clear error)
+        log_to_file("Failed to create temporary script, using first path as fallback");
         paths[0].clone()
+    }
+    
+    // Create a temporary notification script if none exists
+    fn create_temporary_script() -> Option<PathBuf> {
+        use std::io::Write;
+        
+        let temp_dir = std::env::temp_dir();
+        let script_path = temp_dir.join("isup-notify.sh");
+        
+        // Basic notification script content
+        let script_content = r#"#!/bin/bash
+# Temporary notification script created by isup
+# Log file for debugging
+LOG_FILE="/tmp/isup_notify.log"
+
+# Function to log messages
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Check if we have enough arguments
+if [ $# -lt 2 ]; then
+    log_message "error: not enough arguments. usage: $0 \"title\" \"message\""
+    exit 1
+fi
+
+TITLE="$1"
+MESSAGE="$2"
+
+log_message "attempting to send notification:"
+log_message "title: $TITLE"
+log_message "message: $MESSAGE"
+
+# Detect platform
+PLATFORM="unknown"
+case "$(uname -s)" in
+    Darwin*)    PLATFORM="darwin";;
+    Linux*)     PLATFORM="linux";;
+    MSYS*|MINGW*) PLATFORM="windows";;
+    *)          PLATFORM="unknown";;
+esac
+
+log_message "detected platform: $PLATFORM"
+
+if [ "$PLATFORM" = "darwin" ]; then
+    # Try AppleScript
+    osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" subtitle \"isup\""
+    if [ $? -eq 0 ]; then
+        log_message "notification sent successfully with applescript"
+        exit 0
+    fi
+elif [ "$PLATFORM" = "linux" ]; then
+    # Try notify-send
+    if command -v notify-send &> /dev/null; then
+        notify-send --urgency=critical --app-name=isup "$TITLE" "$MESSAGE"
+        if [ $? -eq 0 ]; then
+            log_message "notification sent successfully with notify-send"
+            exit 0
+        fi
+    fi
+fi
+
+# Fall back to console notification
+echo ""
+echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+echo "! $TITLE"
+echo "! $MESSAGE"
+echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+echo ""
+exit 0
+"#;
+        
+        // Try to write the script file
+        match std::fs::File::create(&script_path) {
+            Ok(mut file) => {
+                if file.write_all(script_content.as_bytes()).is_ok() {
+                    // Make the script executable
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        if let Ok(metadata) = std::fs::metadata(&script_path) {
+                            let mut perms = metadata.permissions();
+                            perms.set_mode(0o755); // rwxr-xr-x
+                            let _ = std::fs::set_permissions(&script_path, perms);
+                        }
+                    }
+                    return Some(script_path);
+                }
+            },
+            Err(_) => {}
+        }
+        
+        None
     }
 }
 

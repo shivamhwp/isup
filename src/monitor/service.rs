@@ -47,10 +47,22 @@ pub fn start_background_service() -> Result<()> {
     
     #[cfg(target_family = "unix")]
     {
-        // Use a more reliable approach with explicit output redirection
+        // Use a more reliable approach with explicit output redirection and environment variables
+        // Get the current user ID for DBUS session
+        let uid = std::process::id();
+        
+        // Get the current DISPLAY environment variable or default to :0
+        let display = std::env::var("DISPLAY").unwrap_or_else(|_| String::from(":0"));
+        
+        // Construct DBUS session address - critical for notifications
+        let dbus_session = format!("unix:path=/run/user/{}/bus", uid);
+        
+        // Create a command with proper environment variables for notifications
         let cmd = format!(
-            "DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{}/bus nohup \"{}\" daemon > /tmp/isup_daemon.log 2>&1 & echo $! > /tmp/isup_daemon.pid",
-            std::process::id(),
+            "DISPLAY={} DBUS_SESSION_BUS_ADDRESS={} XDG_RUNTIME_DIR=/run/user/{} nohup \"{}\" daemon > /tmp/isup_daemon.log 2>&1 & echo $! > /tmp/isup_daemon.pid",
+            display,
+            dbus_session,
+            uid,
             daemon_path.display()
         );
         
