@@ -1,9 +1,24 @@
 #!/bin/bash
 set -e
 
-# Fix any potential Windows line endings without dos2unix
-sed -i.bak 's/\r$//' "$0" 2>/dev/null || true
-rm -f "$0.bak" 2>/dev/null || true
+# More robust fix for Windows line endings
+# This ensures the script itself is free of carriage returns
+if grep -q $'\r' "$0"; then
+    echo "Fixing Windows line endings in the script..."
+    # Create a temporary file
+    TMP_FILE=$(mktemp)
+    # Remove carriage returns and write to temp file
+    tr -d '\r' < "$0" > "$TMP_FILE"
+    # Replace the original file with the fixed version
+    cat "$TMP_FILE" > "$0"
+    rm -f "$TMP_FILE"
+    # Make the script executable again
+    chmod +x "$0"
+    # Re-execute the script with fixed line endings
+    exec "$0" "$@"
+    # This line will not be reached if exec succeeds
+    exit 1
+fi
 
 # Ensure the script is executable
 chmod +x "$0" 2>/dev/null || true
@@ -40,35 +55,26 @@ esac
 
 ARCH="x86_64"
 
-# Check for platform-specific notification dependencies
+# Silently check and install platform-specific notification dependencies
 if [ "$PLATFORM" = "darwin" ]; then
-    progress "checking for terminal-notifier..."
+    # Silently check and install terminal-notifier if needed
     if ! command -v terminal-notifier >/dev/null; then
-        progress "terminal-notifier not found, attempting to install..."
         if command -v brew >/dev/null; then
-            brew install terminal-notifier >/dev/null 2>&1 || progress "couldn't install terminal-notifier, but continuing anyway"
-        else
-            progress "homebrew not found, skipping terminal-notifier installation"
-            progress "you may want to install terminal-notifier manually for notifications"
+            brew install terminal-notifier >/dev/null 2>&1 || true
         fi
-    else
-        progress "terminal-notifier is already installed"
     fi
 elif [ "$PLATFORM" = "linux" ]; then
+    # Silently check and install notify-send if needed
     if ! command -v notify-send >/dev/null; then
-        progress "notify-send not found, attempting to install..."
         if command -v apt-get >/dev/null; then
             sudo apt-get update -qq >/dev/null 2>&1
-            sudo apt-get install -y libnotify-bin >/dev/null 2>&1 || progress "couldn't install libnotify-bin, but continuing anyway"
+            sudo apt-get install -y libnotify-bin >/dev/null 2>&1 || true
         elif command -v dnf >/dev/null; then
-            sudo dnf install -y libnotify >/dev/null 2>&1 || progress "couldn't install libnotify, but continuing anyway"
+            sudo dnf install -y libnotify >/dev/null 2>&1 || true
         elif command -v yum >/dev/null; then
-            sudo yum install -y libnotify >/dev/null 2>&1 || progress "couldn't install libnotify, but continuing anyway"
+            sudo yum install -y libnotify >/dev/null 2>&1 || true
         elif command -v pacman >/dev/null; then
-            sudo pacman -S --noconfirm libnotify >/dev/null 2>&1 || progress "couldn't install libnotify, but continuing anyway"
-        else
-            progress "no package manager found, skipping libnotify installation"
-            progress "you may want to install libnotify manually for notifications"
+            sudo pacman -S --noconfirm libnotify >/dev/null 2>&1 || true
         fi
     fi
 fi
@@ -165,7 +171,9 @@ mkdir -p "$LOG_DIR" || handle_error "Failed to create log directory"
 
 # Ask if user wants to install auto-start
 read -p "Do you want to install isup to start automatically on login? [y/N] " -n 1 -r
-echo
+
+# Print a newline after the user's response
+echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     progress "setting up auto-start..."
     
