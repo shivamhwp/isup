@@ -118,6 +118,9 @@ fi
 if [ "$PLATFORM" = "darwin" ]; then
     INSTALL_DIR="$HOME/.local/bin"
     mkdir -p "$INSTALL_DIR"
+elif [ "$PLATFORM" = "windows" ]; then
+    INSTALL_DIR="$HOME/.local/bin"
+    mkdir -p "$INSTALL_DIR"
 elif [ -w "/usr/local/bin" ]; then
     INSTALL_DIR="/usr/local/bin"
 else
@@ -127,16 +130,27 @@ fi
 
 # Install binary
 progress "installing isup..."
-if ! mv "$TMP_FILE" "$INSTALL_DIR/isup" || ! chmod 755 "$INSTALL_DIR/isup"; then
-    echo "Error: Failed to install isup"
-    echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
-    rm -rf "$TMP_DIR"
-    exit 1
+if [ "$PLATFORM" = "windows" ]; then
+    if ! mv "$TMP_FILE" "$INSTALL_DIR/isup.exe" || ! chmod 755 "$INSTALL_DIR/isup.exe"; then
+        echo "Error: Failed to install isup"
+        echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
+        rm -rf "$TMP_DIR"
+        exit 1
+    fi
+    BINARY_NAME="isup.exe"
+else
+    if ! mv "$TMP_FILE" "$INSTALL_DIR/isup" || ! chmod 755 "$INSTALL_DIR/isup"; then
+        echo "Error: Failed to install isup"
+        echo "Please check permissions or hit me up here : https://x.com/shivamhwp"
+        rm -rf "$TMP_DIR"
+        exit 1
+    fi
+    BINARY_NAME="isup"
 fi
 
 # Handle macOS specific security (silently)
 if [ "$PLATFORM" = "darwin" ]; then
-    xattr -d com.apple.quarantine "$INSTALL_DIR/isup" 2>/dev/null || true
+    xattr -d com.apple.quarantine "$INSTALL_DIR/$BINARY_NAME" 2>/dev/null || true
 fi
 
 # Add to PATH if needed
@@ -153,20 +167,20 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     fi
 fi
 
-# Setup launch agent for macOS
-if [ "$PLATFORM" = "darwin" ]; then
-    # Ask if user wants to install launch agent
-    read -p "Do you want to install isup as a launch agent (starts automatically on login)? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        progress "setting up launch agent..."
-        
-        # Create necessary directories
+# Setup auto-start for all platforms
+LOG_DIR="$HOME/.isup/logs"
+mkdir -p "$LOG_DIR"
+
+# Ask if user wants to install auto-start
+read -p "Do you want to install isup to start automatically on login? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    progress "setting up auto-start..."
+    
+    # macOS - Launch Agent
+    if [ "$PLATFORM" = "darwin" ]; then
         LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
-        LOG_DIR="$HOME/.isup/logs"
-        
         mkdir -p "$LAUNCH_AGENT_DIR"
-        mkdir -p "$LOG_DIR"
         
         # Create the launch agent plist file
         LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.shivamhwp.isup.plist"
@@ -180,7 +194,7 @@ if [ "$PLATFORM" = "darwin" ]; then
     <string>com.shivamhwp.isup</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$INSTALL_DIR/isup</string>
+        <string>$INSTALL_DIR/$BINARY_NAME</string>
         <string>daemon</string>
     </array>
     <key>RunAtLoad</key>
@@ -217,6 +231,80 @@ EOL
             progress "⚠️ launch agent installation may have failed"
             progress "please check the logs or run manually with: launchctl load $LAUNCH_AGENT_FILE"
         fi
+    
+    # Linux - Systemd User Service
+    elif [ "$PLATFORM" = "linux" ]; then
+        # Check if systemd is available
+        if command -v systemctl >/dev/null; then
+            SYSTEMD_DIR="$HOME/.config/systemd/user"
+            mkdir -p "$SYSTEMD_DIR"
+            
+            # Create systemd service file
+            SYSTEMD_FILE="$SYSTEMD_DIR/isup.service"
+            
+            cat > "$SYSTEMD_FILE" << EOL
+[Unit]
+Description=isup monitoring service
+After=network.target
+
+[Service]
+ExecStart=$INSTALL_DIR/$BINARY_NAME daemon
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
+EOL
+            
+            # Reload systemd
+            systemctl --user daemon-reload
+            
+            # Enable and start the service
+            systemctl --user enable isup.service
+            systemctl --user start isup.service
+            
+            progress "✅ systemd user service installed and started!"
+            progress "check status with: systemctl --user status isup.service"
+        
+        # Fallback to desktop entry if systemd is not available
+        else
+            AUTOSTART_DIR="$HOME/.config/autostart"
+            mkdir -p "$AUTOSTART_DIR"
+            
+            # Create desktop entry
+            DESKTOP_FILE="$AUTOSTART_DIR/isup.desktop"
+            
+            cat > "$DESKTOP_FILE" << EOL
+[Desktop Entry]
+Type=Application
+Name=isup
+Exec=$INSTALL_DIR/$BINARY_NAME daemon
+Terminal=false
+X-GNOME-Autostart-enabled=true
+Comment=isup monitoring service
+EOL
+            
+            chmod +x "$DESKTOP_FILE"
+            progress "✅ desktop autostart entry created!"
+            progress "isup will start automatically on next login"
+        fi
+    
+    # Windows - Startup Folder
+    elif [ "$PLATFORM" = "windows" ]; then
+        STARTUP_DIR="$APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+        mkdir -p "$STARTUP_DIR" 2>/dev/null || true
+        
+        # Create VBS script to run without showing a command window
+        STARTUP_SCRIPT="$STARTUP_DIR\\isup.vbs"
+        
+        cat > "$STARTUP_SCRIPT" << EOL
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run chr(34) & "$INSTALL_DIR\\$BINARY_NAME" & chr(34) & " daemon", 0
+Set WshShell = Nothing
+EOL
+        
+        progress "✅ startup script created!"
+        progress "isup will start automatically on next login"
     fi
 fi
 
