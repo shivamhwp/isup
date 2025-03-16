@@ -32,4 +32,5 @@ i think this should be async, can handle concurrency
 [x] add-command with configurable options
 [x] status
 [x] list
-[ ]
+
+done.
