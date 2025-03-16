@@ -24,7 +24,8 @@ fi
 # Redirecting both stdout and stderr to /dev/null to hide any errors
 # This is useful when running in environments where chmod might fail
 # but we still want the script to continue execution
-chmod +x "$0" >/dev/null 2>&1 || true
+# Silently ensure execute permissions, suppressing all output including errors
+{ chmod +x "$0"; } >/dev/null 2>&1 || true
 
 # Simple progress function
 progress() {

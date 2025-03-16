@@ -28,30 +28,26 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Add a site to monitor
     Add {
-        /// URL to monitor
         url: String,
-        /// Check interval in seconds
+
         #[clap(short, long, default_value = "16.9")]
         interval: f64,
-        /// Notification method (currently only device is supported)
+
         #[clap(short, long, default_value = "device")]
         notify: String,
     },
-    /// List all monitored sites
+
     List,
-    /// Remove a site from monitoring
+
     Remove {
-        /// URL to stop monitoring
         url: String,
     },
-    /// Show status of all monitored sites
+
     Status,
-    /// Run the background monitoring daemon (internal use)
-    #[clap(hide = true)]
+
     Daemon,
-    /// Stop the monitoring service
+
     StopMs,
 }
 

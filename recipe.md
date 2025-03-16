@@ -25,3 +25,11 @@ i think this should be async, can handle concurrency
 4. Checks are distributed over time to avoid CPU spikes, how and why?
 5. Efficient sleep patterns that only wake when needed, where and how are they making the code efficient.
 6.
+
+# todo [ what have we done till now ]
+
+[x] stop-ms command : to stop the process
+[x] add-command with configurable options
+[x] status
+[x] list
+[ ]

@@ -22,9 +22,9 @@ rusqlite = { version = "0.30.0", features = ["bundled"] }
 tokio = { version = "1.34.0", features = ["full"] }
 dirs = "6.0.0"
 chrono = "0.4.31"
+notifica = "3.0.2"
+terminal_size = "0.4.2"
 
-[target.'cfg(target_os = "macos")'.dependencies]
-mac-notification-sys = "0.6.1"
 
 [profile.release]
 codegen-units = 1
