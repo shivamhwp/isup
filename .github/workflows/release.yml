@@ -37,7 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
+        if: matrix.platform.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config
