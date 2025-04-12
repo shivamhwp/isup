@@ -24,7 +24,6 @@ dirs = "6.0.0"
 chrono = "0.4.31"
 notifica = "3.0.2"
 terminal_size = "0.4.2"
-openssl = "0.10.72"  # for security
 
 [profile.release]
 codegen-units = 1

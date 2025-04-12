@@ -835,7 +835,6 @@ dependencies = [
  "colored",
  "dirs 6.0.0",
  "notifica",
- "openssl",
  "reqwest",
  "rusqlite",
  "terminal_size",
