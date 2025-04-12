@@ -21,10 +21,9 @@ i think this should be async, can handle concurrency
 
 ### some q's to ask:
 
-3. why do we need this : Efficient sleep patterns that wake only when needed
-4. Checks are distributed over time to avoid CPU spikes, how and why?
-5. Efficient sleep patterns that only wake when needed, where and how are they making the code efficient.
-6.
+1. why do we need this : Efficient sleep patterns that wake only when needed
+2. Checks are distributed over time to avoid CPU spikes, how and why?
+3. Efficient sleep patterns that only wake when needed, where and how are they making the code efficient.
 
 # todo [ what have we done till now ]
 

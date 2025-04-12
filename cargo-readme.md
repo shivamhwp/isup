@@ -1,10 +1,6 @@
 # isup
 
-![Crates.io Total Downloads](https://img.shields.io/crates/d/isup?labelColor=%23222&color=white)
-
 on-device monitoring. lightweight, instant and efficient.
-
-crates.io: [https://crates.io/crates/isup](https://crates.io/crates/isup)
 
 ## Features
 

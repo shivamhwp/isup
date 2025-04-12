@@ -88,7 +88,7 @@ fn main() -> Result<()> {
         None => {
             // Original functionality for direct URL checking
             let client = Client::builder()
-                .user_agent("isup/0.1.0")
+                .user_agent("isup/2.0.3")
                 .timeout(Duration::from_secs(args.timeout))
                 .build()
                 .context("failed to create HTTP client")?;

@@ -1,6 +1,5 @@
 use anyhow::{Result, anyhow};
 use std::fmt;
-use std::path::PathBuf;
 use std::fs::OpenOptions;
 use std::io::Write;
 use chrono;
@@ -11,27 +10,6 @@ trait Notifier: fmt::Debug {
     fn name(&self) -> &'static str;
 }
 
-#[allow(dead_code)]
-// Path to the application icon
-fn get_icon_path() -> PathBuf {
-    // Try different locations for the icon
-    let possible_paths = [
-        "isup.png",                             // Current directory
-        "./assets/isup.png",                    // Assets directory
-        "/usr/share/icons/hicolor/scalable/apps/isup.png", // Linux system icon
-        "/Applications/isup.app/Contents/Resources/isup.png", // macOS app bundle
-    ];
-    
-    for path in possible_paths.iter() {
-        let path_buf = PathBuf::from(path);
-        if path_buf.exists() {
-            return path_buf;
-        }
-    }
-    
-    // Default fallback - just return the name and let the OS find it
-    PathBuf::from("isup.png")
-}
 
 // Notification service that manages multiple notifiers
 pub struct NotificationService {

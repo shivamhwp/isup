@@ -1,12 +1,12 @@
 use anyhow:: Result;
 use colored::*;
 use std::time::{SystemTime, UNIX_EPOCH};
-use terminal_size::{terminal_size, Width, Height};
+use terminal_size::terminal_size;
 
 use crate::monitor::db::{add_site_to_db, get_all_sites, get_site_by_url, remove_site_from_db, Site};
 use crate::monitor::service::{start_background_service, is_daemon_running};
 
-pub fn add_site(
+pub fn  add_site(
     url: &str,
     interval: f64,
     notify: &str
@@ -64,7 +64,7 @@ pub fn list_sites() -> Result<()> {
     let term_width = terminal_size().map(|(w, _)| w.0 as usize).unwrap_or(80);
     
     if sites.is_empty() {
-        println!("\n{}", "  no sites are currently being monitored".yellow().italic());
+        println!("{}", "  no sites are currently being monitored".yellow().italic());
         return Ok(());
     }
     
@@ -84,9 +84,6 @@ pub fn list_sites() -> Result<()> {
 
     // Dynamic column widths based on terminal size
     let url_width = (term_width * 50 / 100).min(35);
-
-    let status_width = 12;
-    let interval_width = 10;
 
     // Header with clean separators
     println!(" {:<width$} │ {:<8} │ {:<10}", 
@@ -155,7 +152,7 @@ pub fn status_sites() -> Result<()> {
     let term_width = terminal_size().map(|(w, _)| w.0 as usize).unwrap_or(80);
     
     if sites.is_empty() {
-        println!("\n{}", "  no sites are currently being monitored".yellow().italic());
+        println!("{}", "  no sites are currently being monitored".yellow().italic());
         return Ok(());
     }
     
@@ -175,8 +172,6 @@ pub fn status_sites() -> Result<()> {
 
     // Dynamic column widths
     let url_width = (term_width * 40 / 100).min(35);
-    let status_width = 10;
-    let time_width = 20;
     
     println!(" {:<width$} │ {:<8} │ {:<15} │ {:<10}", 
         "URL".bold(), 
